@@ -7,8 +7,11 @@ use std::collections::{BTreeMap, VecDeque};
 use serde::{Deserialize, Serialize};
 
 use crate::command::{Command, CommandError, PlayerId};
+use crate::economy::Economy;
 use crate::network::shortest_path;
 use crate::{Fixed, SimRng, TICKS_PER_SECOND};
+
+mod econ;
 
 macro_rules! id_type {
     ($name:ident) => {
@@ -128,6 +131,8 @@ pub struct World {
     nodes: BTreeMap<NodeId, Node>,
     tracks: BTreeMap<TrackId, Track>,
     trains: BTreeMap<TrainId, Train>,
+    /// Money, towns and passengers; see `economy` and `world::econ`.
+    economy: Economy,
 }
 
 #[derive(Debug)]
@@ -150,6 +155,7 @@ impl World {
             nodes: BTreeMap::new(),
             tracks: BTreeMap::new(),
             trains: BTreeMap::new(),
+            economy: Economy::default(),
         }
     }
 
@@ -201,8 +207,15 @@ impl World {
     }
 
     /// Validates and applies one player command. A rejected command leaves
-    /// the world untouched.
+    /// the world untouched. A player's first accepted command founds their
+    /// company with the starting money.
     pub fn apply(&mut self, player: PlayerId, cmd: &Command) -> Result<(), CommandError> {
+        self.apply_command(player, cmd)?;
+        self.economy.company_mut(player);
+        Ok(())
+    }
+
+    fn apply_command(&mut self, player: PlayerId, cmd: &Command) -> Result<(), CommandError> {
         match cmd {
             &Command::BuildNode { pos } => {
                 let id = NodeId(self.alloc_id());
@@ -225,6 +238,9 @@ impl World {
                 if length == Fixed::ZERO {
                     return Err(CommandError::DegenerateTrack);
                 }
+                let cost = self.economy.track_cost(length);
+                self.ensure_funds(player, cost)?;
+                self.economy.spend(player, cost);
                 let id = TrackId(self.alloc_id());
                 self.tracks.insert(
                     id,
@@ -239,12 +255,17 @@ impl World {
             &Command::BuildStation { node } => {
                 let n = self
                     .nodes
-                    .get_mut(&node)
+                    .get(&node)
                     .ok_or(CommandError::UnknownNode(node))?;
                 if n.owner != player {
                     return Err(CommandError::NotOwner);
                 }
-                n.station = true;
+                if !n.station {
+                    let cost = self.economy.rules.station_cost;
+                    self.ensure_funds(player, cost)?;
+                    self.economy.spend(player, cost);
+                    self.nodes.get_mut(&node).expect("checked above").station = true;
+                }
             }
             &Command::SpawnTrain { track } => {
                 if !self.tracks.contains_key(&track) {
@@ -253,6 +274,9 @@ impl World {
                 if self.occupant(track).is_some() {
                     return Err(CommandError::TrackOccupied(track));
                 }
+                let cost = self.economy.rules.train_cost;
+                self.ensure_funds(player, cost)?;
+                self.economy.spend(player, cost);
                 let id = TrainId(self.alloc_id());
                 self.trains.insert(
                     id,
@@ -304,7 +328,13 @@ impl World {
                     return Err(CommandError::NotOwner);
                 }
                 self.trains.remove(&train);
+                self.sell_train(train, player);
             }
+            &Command::FoundTown {
+                pos,
+                name_seed,
+                population,
+            } => self.found_town(pos, name_seed, population)?,
         }
         Ok(())
     }
@@ -394,18 +424,20 @@ impl World {
                     train.held = true;
                 } else {
                     train.speed = Fixed::ZERO;
-                    self.arrive(&mut train, node);
+                    self.arrive(id, &mut train, node);
                 }
             }
             self.trains.insert(id, train);
         }
         self.tick += 1;
+        self.economy_step();
     }
 
     /// A train has stopped at the end of its path at `node`.
-    fn arrive(&mut self, train: &mut Train, node: NodeId) {
+    fn arrive(&mut self, id: TrainId, train: &mut Train, node: NodeId) {
         let at_stop = train.stops.get(train.next_stop) == Some(&node);
         if at_stop {
+            self.exchange_passengers(id, train, node);
             train.next_stop = (train.next_stop + 1) % train.stops.len();
         }
         if at_stop || train.stops.is_empty() {
