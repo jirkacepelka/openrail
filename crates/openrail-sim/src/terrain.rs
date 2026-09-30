@@ -79,7 +79,7 @@ const SALT_MOISTURE: u64 = 8;
 const SALT_RIVER_LAYOUT: u64 = 9;
 
 /// Half width of the river's water, in metres.
-const RIVER_HALF_WIDTH: i64 = 45;
+const RIVER_HALF_WIDTH: i64 = 80;
 /// Distance from the river over which its valley rises to the land, in metres.
 const RIVER_VALLEY: i64 = 1700;
 
@@ -172,15 +172,16 @@ fn river_distance(seed: u64, x: i64, y: i64) -> i64 {
 /// Height of the land before the river is cut into it, in Q16 metres.
 fn land(seed: u64, x: i64, y: i64) -> i64 {
     let plains = fbm(seed, SALT_PLAINS, x, y, 12_800, 3);
-    let hilly = smoothstep(-ONE / 20, ONE * 2 / 5, fbm(seed, SALT_HILLY, x, y, 9600, 2));
-    let rolling = 10 * fbm(seed, SALT_ROLLING, x, y, 800, 3);
+    let hilly = smoothstep(-ONE / 6, ONE * 3 / 10, fbm(seed, SALT_HILLY, x, y, 9600, 2));
+    let rolling = 30 * fbm(seed, SALT_ROLLING, x, y, 1600, 4);
     let mut h = m(42) + 38 * plains + rolling;
     if hilly > 0 {
         // Rounded massifs with a few ridges on top.
-        let ridge = ONE - fbm(seed, SALT_RIDGES, x, y, 4800, 2).abs();
-        let ridge = mul(mul(ridge, ridge), ridge);
-        let mass = fbm(seed, SALT_HILLS, x, y, 3200, 3) + ONE;
-        h += mul(hilly, 110 * ridge + 55 * mass);
+        let ridge = ONE - fbm(seed, SALT_RIDGES, x, y, 3200, 3).abs();
+        let ridge = mul(ridge, ridge);
+        let mass = fbm(seed, SALT_HILLS, x, y, 2400, 3) + ONE;
+        let knolls = fbm(seed, SALT_HILLS + 100, x, y, 1400, 2);
+        h += mul(hilly, 110 * ridge + 45 * mass + 60 * knolls);
     }
     if hilly < ONE {
         // Shallow lakes, only in the plains.
@@ -271,7 +272,7 @@ mod tests {
         assert_eq!(grid_hash(1), TERRAIN_GOLDEN);
     }
 
-    const TERRAIN_GOLDEN: u64 = 0xb0825359a1cee37f;
+    const TERRAIN_GOLDEN: u64 = 0xb518d3c0a2f21357;
 
     #[test]
     fn heights_stay_in_range_and_are_continuous() {
@@ -348,7 +349,23 @@ mod tests {
                     buckets[(v / 20).clamp(0, 14) as usize] += 1;
                 }
             }
-            println!("seed {seed}: {buckets:?}");
+            let mut slopes: Vec<i64> = Vec::new();
+            for iy in -40..=40 {
+                for ix in -40..=40 {
+                    let (x, y) = (ix * 500, iy * 500);
+                    let d = (h(seed, x + 25, y) - h(seed, x, y)).abs();
+                    slopes.push(d.to_bits() * 100 / (25 << 16));
+                }
+            }
+            slopes.sort();
+            let p = |q: usize| slopes[slopes.len() * q / 100];
+            println!(
+                "seed {seed}: {buckets:?} slope% p50 {} p90 {} p99 {} max {}",
+                p(50),
+                p(90),
+                p(99),
+                slopes[slopes.len() - 1]
+            );
         }
     }
 }
