@@ -1,7 +1,7 @@
-[gd_scene load_steps=6 format=3]
+[gd_scene load_steps=5 format=3]
 
-[ext_resource type="Script" path="res://main.gd" id="1"]
 [ext_resource type="PackedScene" path="res://art/art_style.tscn" id="2_art"]
+[ext_resource type="Script" path="res://main.gd" id="1"]
 
 [sub_resource type="ProceduralSkyMaterial" id="sky_mat"]
 
