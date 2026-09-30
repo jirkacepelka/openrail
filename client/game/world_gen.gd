@@ -4,6 +4,9 @@ extends RefCounted
 
 const MAP_HALF := 6000.0 ## Towns are placed within +-MAP_HALF metres of the origin.
 const MIN_TOWN_DISTANCE := 2500.0 ## Relaxed if the map gets crowded.
+## Never closer than this: a big town with its ring of fields is about 900 m
+## in radius (see world/towns_layout.gd).
+const MIN_TOWN_DISTANCE_FLOOR := 2000.0
 const MIN_POPULATION := 500
 const MAX_POPULATION := 5000
 const MIN_TOWNS := 3
@@ -43,7 +46,8 @@ static func generate(sim: SimWorld, seed_value: int, towns: int) -> int:
 		attempts += 1
 		if not ok:
 			if attempts % 200 == 0:
-				min_dist *= 0.9 # crowded: accept closer towns rather than loop forever
+				# Crowded: accept closer towns rather than loop forever.
+				min_dist = maxf(min_dist * 0.9, MIN_TOWN_DISTANCE_FLOOR)
 			continue
 		if site_rejects < MAX_SITE_REJECTS and not good_site(sim, p):
 			site_rejects += 1
