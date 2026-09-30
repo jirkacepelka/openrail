@@ -45,10 +45,12 @@ else
 fi
 
 if [ ! -f "$godot_bin" ]; then
-  curl -fsSL --retry 3 -o "$dir/editor.zip" "$base/${editor}.zip"
   if [ "$platform" = "windows" ]; then
+    # The Windows editor zip is named after the .exe it holds.
+    curl -fsSL --retry 3 -o "$dir/editor.zip" "$base/${editor}.exe.zip"
     extract "$dir/editor.zip" "$dir" "${editor}_console.exe:godot.exe"
   else
+    curl -fsSL --retry 3 -o "$dir/editor.zip" "$base/${editor}.zip"
     extract "$dir/editor.zip" "$dir" "${editor}:godot"
     chmod +x "$godot_bin"
   fi
