@@ -166,7 +166,8 @@ func _apply() -> void:
 	# Stay above hills between the camera and the focus.
 	var floor_y := _ground(pos.x, pos.z) + ground_clearance + distance * 0.02
 	pos.y = maxf(pos.y, floor_y)
-	# Clip planes scaled to the zoom: fine depth close up, far horizon high up.
+	# Near plane scaled to the zoom for fine depth close up. The far plane
+	# only ever grows (ArtStyle may have set it further for its fog).
 	near = clampf(distance * 0.002, 0.25, 20.0)
-	far = clampf(distance * 6.0 + 24000.0, 25000.0, 60000.0)
+	far = maxf(far, 40000.0)
 	look_at_from_position(pos, focus, Vector3.UP)
