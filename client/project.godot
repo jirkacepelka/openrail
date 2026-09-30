@@ -3,8 +3,12 @@ config_version=5
 
 [application]
 config/name="OpenRail"
-run/main_scene="res://main.tscn"
+run/main_scene="res://ui/main_menu.tscn"
 config/features=PackedStringArray("4.4", "Forward Plus")
+
+[autoload]
+
+Session="*res://game/session.gd"
 
 [rendering]
 renderer/rendering_method="forward_plus"
