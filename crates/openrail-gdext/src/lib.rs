@@ -1,7 +1,7 @@
 //! Godot 4 GDExtension exposing the OpenRail simulation as `SimWorld`.
 
 use godot::prelude::*;
-use openrail_sim::{Command, Fixed, NodeId, PlayerId, TrackId, TrainId, Vec2, World};
+use openrail_sim::{Command, CommandError, Fixed, NodeId, PlayerId, TrackId, TrainId, Vec2, World};
 
 fn vector2(p: Vec2) -> Vector2 {
     Vector2::new(p.x.to_f64_lossy() as f32, p.y.to_f64_lossy() as f32)
@@ -27,6 +27,8 @@ fn fixed_from_f64(v: f64) -> Fixed {
 #[class(base=RefCounted)]
 pub struct SimWorld {
     world: World,
+    last_error: GString,
+    error_count: i64,
     base: Base<RefCounted>,
 }
 
@@ -35,8 +37,25 @@ impl IRefCounted for SimWorld {
     fn init(base: Base<RefCounted>) -> Self {
         SimWorld {
             world: World::new(0),
+            last_error: GString::new(),
+            error_count: 0,
             base,
         }
+    }
+}
+
+impl SimWorld {
+    /// Apply a command as the local player, remembering the error text.
+    fn apply(&mut self, cmd: &Command) -> Result<(), CommandError> {
+        let result = self.world.apply(LOCAL_PLAYER, cmd);
+        self.last_error = match &result {
+            Ok(()) => GString::new(),
+            Err(e) => {
+                self.error_count += 1;
+                GString::from(e.to_string().as_str())
+            }
+        };
+        result
     }
 }
 
@@ -67,7 +86,7 @@ impl SimWorld {
     #[func]
     fn build_node(&mut self, x: f64, y: f64) -> i64 {
         let pos = Vec2::new(fixed_from_f64(x), fixed_from_f64(y));
-        match self.world.apply(LOCAL_PLAYER, &Command::BuildNode { pos }) {
+        match self.apply(&Command::BuildNode { pos }) {
             Ok(()) => self
                 .world
                 .nodes()
@@ -88,7 +107,7 @@ impl SimWorld {
             a: NodeId(a),
             b: NodeId(b),
         };
-        match self.world.apply(LOCAL_PLAYER, &cmd) {
+        match self.apply(&cmd) {
             Ok(()) => self
                 .world
                 .tracks()
@@ -108,7 +127,7 @@ impl SimWorld {
         let cmd = Command::SpawnTrain {
             track: TrackId(track),
         };
-        match self.world.apply(LOCAL_PLAYER, &cmd) {
+        match self.apply(&cmd) {
             Ok(()) => self
                 .world
                 .trains()
@@ -126,7 +145,7 @@ impl SimWorld {
             return false;
         };
         let cmd = Command::BuildStation { node: NodeId(node) };
-        self.world.apply(LOCAL_PLAYER, &cmd).is_ok()
+        self.apply(&cmd).is_ok()
     }
 
     /// Send a train around the given station node ids in a loop. Returns
@@ -148,7 +167,7 @@ impl SimWorld {
             train: TrainId(train),
             stops,
         };
-        self.world.apply(LOCAL_PLAYER, &cmd).is_ok()
+        self.apply(&cmd).is_ok()
     }
 
     /// All nodes as `{id, x, y, station}` (rendering and UI only, lossy).
@@ -298,5 +317,45 @@ impl SimWorld {
             }
         }
         out
+    }
+
+    /// Found a town at (x, y) metres. Returns `false` if it was rejected.
+    #[func]
+    fn found_town(&mut self, x: f64, y: f64, population: i64, name_seed: i64) -> bool {
+        let (Ok(population), Ok(name_seed)) = (u32::try_from(population), u32::try_from(name_seed))
+        else {
+            return false;
+        };
+        let cmd = Command::FoundTown {
+            pos: Vec2::new(fixed_from_f64(x), fixed_from_f64(y)),
+            name_seed,
+            population,
+        };
+        self.apply(&cmd).is_ok()
+    }
+
+    /// Passengers one train carries (economy rule).
+    #[func]
+    fn train_capacity(&self) -> i64 {
+        i64::from(self.world.rules().train_capacity)
+    }
+
+    /// English text of the error of the last rejected build command, or an
+    /// empty string if the last command succeeded.
+    #[func]
+    fn last_error(&self) -> GString {
+        self.last_error.clone()
+    }
+
+    /// Number of commands rejected so far (lets the UI notice a new failure).
+    #[func]
+    fn error_count(&self) -> i64 {
+        self.error_count
+    }
+
+    /// `true` if the last rejected command failed for lack of money.
+    #[func]
+    fn last_error_is_funds(&self) -> bool {
+        self.last_error.to_string() == CommandError::InsufficientFunds.to_string()
     }
 }
