@@ -12,6 +12,8 @@
 //! - [`host`] and [`client`]: transport-agnostic state machines, testable
 //!   without sockets.
 //! - `quic` (feature `quic`, on by default): the QUIC transport.
+//! - `remote` (feature `quic`): a non-blocking client for game frontends,
+//!   with the transport on a background thread.
 
 pub mod client;
 pub mod codec;
@@ -19,6 +21,8 @@ pub mod host;
 pub mod protocol;
 #[cfg(feature = "quic")]
 pub mod quic;
+#[cfg(feature = "quic")]
+pub mod remote;
 
 pub use client::{ClientEvent, ClientState, LockstepClient};
 pub use host::{ConnId, HostConfig, HostOutput, LockstepHost, PlayerStatus};

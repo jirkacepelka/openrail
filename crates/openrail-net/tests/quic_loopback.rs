@@ -167,3 +167,37 @@ async fn scenario() {
     let _ = stop_tx.send(());
     server.await.unwrap();
 }
+
+/// The host keeps its tick rate even when the OS wakes it late: with a
+/// 2 ms period and Windows' ~15.6 ms timer granularity, a host that waits
+/// one period per wake-up would manage about 64 ticks a second.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn host_keeps_its_tick_rate_with_coarse_timers() {
+    let identity = ServerIdentity::generate().unwrap();
+    let endpoint = server_endpoint("127.0.0.1:0".parse().unwrap(), &identity).unwrap();
+    let host = Arc::new(Mutex::new(LockstepHost::new(
+        World::new(1),
+        HostConfig::default(),
+    )));
+    let (stop_tx, stop_rx) = oneshot::channel::<()>();
+    let started = std::time::Instant::now();
+    let server = tokio::spawn(run_host(
+        endpoint,
+        host.clone(),
+        Duration::from_millis(2),
+        |_| {},
+        async {
+            let _ = stop_rx.await;
+        },
+    ));
+    tokio::time::sleep(Duration::from_millis(1000)).await;
+    let ticks = host.lock().unwrap().world().tick();
+    let elapsed = started.elapsed();
+    let _ = stop_tx.send(());
+    server.await.unwrap();
+    let expected = elapsed.as_millis() as u64 / 2;
+    assert!(
+        ticks >= expected / 2 && ticks <= expected + 5,
+        "{ticks} ticks in {elapsed:?}, expected about {expected}"
+    );
+}

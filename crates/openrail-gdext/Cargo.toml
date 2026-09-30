@@ -12,4 +12,5 @@ crate-type = ["cdylib"]
 
 [dependencies]
 openrail-sim.workspace = true
+openrail-net.workspace = true
 godot.workspace = true

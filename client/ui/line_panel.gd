@@ -4,6 +4,7 @@ extends PanelContainer
 
 const Tools := preload("res://gameplay/tools.gd")
 const BuildController := preload("res://gameplay/build_controller.gd")
+const Loc := preload("res://game/loc.gd")
 
 var controller: BuildController
 
@@ -26,7 +27,7 @@ func _ready() -> void:
 	var box := VBoxContainer.new()
 	add_child(box)
 	var title := Label.new()
-	title.text = "Trains and lines"
+	title.text = Loc.t("lines.title")
 	box.add_child(title)
 	box.add_child(HSeparator.new())
 	_scroll = ScrollContainer.new()
@@ -41,6 +42,7 @@ func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT, Control.PRESET_MODE_MINSIZE, 12)
 	grow_horizontal = Control.GROW_DIRECTION_BEGIN
 	grow_vertical = Control.GROW_DIRECTION_END
+	offset_top = 72 # below the HUD bar
 
 	# Routes change inside the sim (for example after a set_route), so poll
 	# lightly in addition to the controller signals.
@@ -67,7 +69,7 @@ func refresh() -> void:
 		c.queue_free()
 	if trains.is_empty():
 		var empty := Label.new()
-		empty.text = "No trains yet. Use the Train tool on a track."
+		empty.text = Loc.t("lines.empty")
 		empty.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		empty.custom_minimum_size = Vector2(250, 0)
 		_list.add_child(empty)
@@ -86,18 +88,18 @@ func _make_row(t: Dictionary) -> Control:
 	var head := HBoxContainer.new()
 	row.add_child(head)
 	var name_label := Label.new()
-	name_label.text = "Train %d" % id
+	name_label.text = Loc.t("lines.train", [id])
 	if id == controller.selected_train:
-		name_label.text += " (editing)"
+		name_label.text += Loc.t("lines.editing")
 	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.add_child(name_label)
 	var focus := Button.new()
-	focus.text = "Show"
+	focus.text = Loc.t("lines.show")
 	focus.focus_mode = Control.FOCUS_NONE
 	focus.pressed.connect(controller.focus_train.bind(id))
 	head.add_child(focus)
 	var edit := Button.new()
-	edit.text = "Route"
+	edit.text = Loc.t("lines.route")
 	edit.focus_mode = Control.FOCUS_NONE
 	edit.pressed.connect(controller.select_train.bind(id))
 	head.add_child(edit)
@@ -106,7 +108,7 @@ func _make_row(t: Dictionary) -> Control:
 	stops_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	stops_label.custom_minimum_size = Vector2(250, 0)
 	if stops.is_empty():
-		stops_label.text = "No route (shuttles on track %d)" % int(t["track"])
+		stops_label.text = Loc.t("lines.no_route", [int(t["track"])])
 	else:
 		var names := PackedStringArray()
 		for s in stops:
