@@ -6,6 +6,7 @@
 
 pub mod command;
 pub mod fixed;
+pub mod network;
 pub mod replay;
 pub mod rng;
 pub mod world;

@@ -10,10 +10,29 @@ pub struct PlayerId(pub u16);
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Command {
-    BuildNode { pos: Vec2 },
-    BuildTrack { a: NodeId, b: NodeId },
-    SpawnTrain { track: TrackId },
-    RemoveTrain { train: TrainId },
+    BuildNode {
+        pos: Vec2,
+    },
+    BuildTrack {
+        a: NodeId,
+        b: NodeId,
+    },
+    /// Turns a node the player owns into a station.
+    BuildStation {
+        node: NodeId,
+    },
+    SpawnTrain {
+        track: TrackId,
+    },
+    /// Sends a train around these stations in a loop. An empty list puts
+    /// it back into shuttle mode.
+    SetRoute {
+        train: TrainId,
+        stops: Vec<NodeId>,
+    },
+    RemoveTrain {
+        train: TrainId,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -23,6 +42,8 @@ pub enum CommandError {
     UnknownTrain(TrainId),
     DegenerateTrack,
     NotOwner,
+    NotAStation(NodeId),
+    TrackOccupied(TrackId),
 }
 
 impl std::fmt::Display for CommandError {
@@ -33,6 +54,8 @@ impl std::fmt::Display for CommandError {
             CommandError::UnknownTrain(id) => write!(f, "train {} does not exist", id.0),
             CommandError::DegenerateTrack => write!(f, "track must join two distinct points"),
             CommandError::NotOwner => write!(f, "that belongs to another player"),
+            CommandError::NotAStation(id) => write!(f, "node {} is not a station", id.0),
+            CommandError::TrackOccupied(id) => write!(f, "track {} already has a train", id.0),
         }
     }
 }

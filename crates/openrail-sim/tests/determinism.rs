@@ -9,27 +9,28 @@ const P2: PlayerId = PlayerId(2);
 /// Hash of `scenario()` after `GATE_TICKS` ticks. If a change to the
 /// simulation moves this value on purpose, update it in the same commit
 /// and say why in the message. If it moves by accident, that is a bug.
-const GOLDEN_HASH: u64 = 0x02459a2dfaf73c95;
+const GOLDEN_HASH: u64 = 0x26237415d9ba46de;
 const GATE_TICKS: u64 = 10_000;
 
 fn pos(x: i32, y: i32) -> Vec2 {
     Vec2::new(Fixed::from_int(x), Fixed::from_int(y))
 }
 
-/// Two players, four tracks of different lengths, trains spawned at
-/// different times, one invalid command and one removal.
+/// A ring line with four stations and three P1 trains following each
+/// other, a separate P2 shuttle, several rejected commands and a removal.
 fn scenario() -> Replay {
     let mut r = Replay::new(0x0E7_2A11);
-    // Ids are allocated in order: nodes 1..=5, then tracks 6..=9.
+    // Ids are allocated in order: nodes 1..=6, tracks 7..=11, trains 12..
     r.push(0, P1, Command::BuildNode { pos: pos(0, 0) });
-    r.push(0, P1, Command::BuildNode { pos: pos(2000, 0) });
+    r.push(0, P1, Command::BuildNode { pos: pos(3000, 0) });
     r.push(
         0,
         P1,
         Command::BuildNode {
-            pos: pos(2000, 1500),
+            pos: pos(3000, 2000),
         },
     );
+    r.push(0, P1, Command::BuildNode { pos: pos(0, 2000) });
     r.push(
         0,
         P2,
@@ -62,29 +63,50 @@ fn scenario() -> Replay {
     );
     r.push(
         1,
-        P2,
+        P1,
+        Command::BuildTrack {
+            a: NodeId(3),
+            b: NodeId(4),
+        },
+    );
+    r.push(
+        1,
+        P1,
         Command::BuildTrack {
             a: NodeId(4),
-            b: NodeId(5),
+            b: NodeId(1),
         },
     );
     r.push(
         1,
         P2,
         Command::BuildTrack {
-            a: NodeId(1),
-            b: NodeId(4),
+            a: NodeId(5),
+            b: NodeId(6),
         },
     );
-    r.push(2, P1, Command::SpawnTrain { track: TrackId(6) });
+    for n in 1..=4 {
+        r.push(1, P1, Command::BuildStation { node: NodeId(n) });
+    }
     r.push(2, P1, Command::SpawnTrain { track: TrackId(7) });
-    r.push(40, P2, Command::SpawnTrain { track: TrackId(8) });
-    r.push(41, P2, Command::SpawnTrain { track: TrackId(99) }); // rejected
-    r.push(700, P2, Command::SpawnTrain { track: TrackId(9) });
-    r.push(900, P1, Command::SpawnTrain { track: TrackId(6) });
-    r.push(2500, P2, Command::RemoveTrain { train: TrainId(10) }); // not P2's
-    r.push(5000, P1, Command::RemoveTrain { train: TrainId(11) });
+    r.push(2, P1, Command::SpawnTrain { track: TrackId(9) });
+    r.push(3, P1, route(12, &[2, 3, 4, 1]));
+    r.push(3, P1, route(13, &[4, 1, 2, 3]));
+    r.push(40, P2, Command::SpawnTrain { track: TrackId(11) });
+    r.push(41, P2, Command::SpawnTrain { track: TrackId(7) }); // occupied
+    r.push(42, P2, route(14, &[5])); // not a station
+    r.push(600, P1, Command::SpawnTrain { track: TrackId(8) });
+    r.push(601, P1, route(15, &[3, 4, 1, 2]));
+    r.push(2500, P2, Command::RemoveTrain { train: TrainId(12) }); // not P2's
+    r.push(8000, P1, Command::RemoveTrain { train: TrainId(13) });
     r
+}
+
+fn route(train: u32, stops: &[u32]) -> Command {
+    Command::SetRoute {
+        train: TrainId(train),
+        stops: stops.iter().map(|&n| NodeId(n)).collect(),
+    }
 }
 
 #[test]
@@ -148,7 +170,11 @@ fn rejected_commands_leave_world_untouched() {
         )
         .is_err());
     assert!(w
-        .apply(P2, &Command::RemoveTrain { train: TrainId(10) })
+        .apply(P2, &Command::RemoveTrain { train: TrainId(12) })
+        .is_err());
+    assert!(w.apply(P1, &route(12, &[5])).is_err());
+    assert!(w
+        .apply(P1, &Command::SpawnTrain { track: TrackId(7) })
         .is_err());
     assert_eq!(w, before);
 }
@@ -166,5 +192,34 @@ fn trains_stay_on_their_track_and_under_max_speed() {
             assert!(train.speed <= openrail_sim::Train::MAX_SPEED);
         }
     }
-    assert_eq!(w.trains().count(), 4);
+    assert_eq!(w.trains().count(), 3);
+}
+
+#[test]
+fn signals_keep_one_train_per_block_and_trains_keep_moving() {
+    let r = scenario();
+    let mut w = World::new(r.seed);
+    let mut stops_reached = std::collections::BTreeMap::new();
+    let mut last_stop = std::collections::BTreeMap::new();
+    let mut ever_held = false;
+    for t in 0..GATE_TICKS {
+        r.run_on(&mut w, t + 1);
+        let mut seen = std::collections::BTreeSet::new();
+        for (id, train) in w.trains() {
+            assert!(
+                seen.insert(train.track),
+                "two trains on track {:?} at tick {t}",
+                train.track
+            );
+            ever_held |= train.held;
+            if last_stop.insert(id, train.next_stop) != Some(train.next_stop) {
+                *stops_reached.entry(id).or_insert(0u32) += 1;
+            }
+        }
+    }
+    assert!(ever_held, "no train was ever held at a signal");
+    for id in [12, 15] {
+        let n = stops_reached[&TrainId(id)];
+        assert!(n >= 5, "train {id} reached only {n} stops");
+    }
 }
