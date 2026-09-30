@@ -75,6 +75,9 @@ cargo build -p openrail-gdext
 Then open `client/project.godot` in Godot 4.4+ and press Play. The extension is
 loaded from `target/debug` (or `target/release`).
 
+The client's painterly look (shaders, lighting, post-process) lives in
+`client/art/`; see [docs/art-style.md](docs/art-style.md) for the style guide.
+
 ## License
 
 Code: MIT (see `LICENSE`). Assets: CC BY-SA 4.0.
