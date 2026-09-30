@@ -28,6 +28,8 @@ func _move_camera() -> void:
 		return
 	var cam := root.get_camera_3d()
 	if cam != null:
+		# An RTS camera script would move it straight back; hold it still.
+		cam.set_process(false)
 		var from := _vec3(_args["look-from"])
 		var at := _vec3(_args.get("look-at", "0,0,0"))
 		cam.look_at_from_position(from, at)
