@@ -14,11 +14,21 @@ pub fn shortest_path(
     from: NodeId,
     to: NodeId,
 ) -> Option<(VecDeque<TrackId>, Fixed)> {
+    shortest_path_avoiding(tracks, from, to, &|_| true)
+}
+
+/// Like [`shortest_path`], using only tracks for which `usable` is true.
+pub fn shortest_path_avoiding(
+    tracks: &BTreeMap<TrackId, Track>,
+    from: NodeId,
+    to: NodeId,
+    usable: &dyn Fn(TrackId) -> bool,
+) -> Option<(VecDeque<TrackId>, Fixed)> {
     if from == to {
         return Some((VecDeque::new(), Fixed::ZERO));
     }
     let mut adjacent: BTreeMap<NodeId, Vec<(TrackId, NodeId, Fixed)>> = BTreeMap::new();
-    for (&id, t) in tracks {
+    for (&id, t) in tracks.iter().filter(|(&id, _)| usable(id)) {
         adjacent.entry(t.a).or_default().push((id, t.b, t.length));
         adjacent.entry(t.b).or_default().push((id, t.a, t.length));
     }

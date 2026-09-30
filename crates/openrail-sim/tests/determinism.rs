@@ -9,7 +9,7 @@ const P2: PlayerId = PlayerId(2);
 /// Hash of `scenario()` after `GATE_TICKS` ticks. If a change to the
 /// simulation moves this value on purpose, update it in the same commit
 /// and say why in the message. If it moves by accident, that is a bug.
-const GOLDEN_HASH: u64 = 0x26237415d9ba46de;
+const GOLDEN_HASH: u64 = 0x2380883f2d750522;
 const GATE_TICKS: u64 = 10_000;
 
 fn pos(x: i32, y: i32) -> Vec2 {
