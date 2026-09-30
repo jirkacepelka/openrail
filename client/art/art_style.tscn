@@ -1,0 +1,53 @@
+[gd_scene load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://art/art_style.gd" id="1_style"]
+[ext_resource type="Shader" path="res://art/shaders/painted_sky.gdshader" id="2_sky"]
+
+[sub_resource type="ShaderMaterial" id="sky_mat"]
+shader = ExtResource("2_sky")
+
+[sub_resource type="Sky" id="sky"]
+sky_material = SubResource("sky_mat")
+
+[sub_resource type="Environment" id="env"]
+background_mode = 2
+sky = SubResource("sky")
+ambient_light_source = 2
+ambient_light_color = Color(0.42, 0.45, 0.72, 1)
+ambient_light_energy = 0.7
+reflected_light_source = 2
+tonemap_mode = 4
+tonemap_exposure = 1.05
+glow_enabled = true
+glow_intensity = 0.6
+glow_strength = 0.9
+glow_bloom = 0.08
+glow_blend_mode = 1
+glow_hdr_threshold = 0.9
+fog_enabled = true
+fog_light_color = Color(0.9, 0.72, 0.58, 1)
+fog_density = 0.00012
+fog_aerial_perspective = 0.35
+fog_sky_affect = 0.4
+adjustment_enabled = true
+adjustment_saturation = 1.05
+
+[node name="ArtStyle" type="Node3D"]
+script = ExtResource("1_style")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("env")
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+rotation = Vector3(-0.55, 2.27, 0)
+light_color = Color(1, 0.84, 0.66, 1)
+light_energy = 1.6
+shadow_enabled = true
+shadow_blur = 1.5
+directional_shadow_max_distance = 8000.0
+
+[node name="RimLight" type="DirectionalLight3D" parent="."]
+rotation = Vector3(-0.35, -1.0, 0)
+light_color = Color(0.55, 0.78, 1, 1)
+light_energy = 0.45
+light_specular = 0.0
