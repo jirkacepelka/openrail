@@ -28,10 +28,11 @@ fn fixed_from_f64(v: f64) -> Fixed {
 /// A world the game renders and picks from.
 ///
 /// A local world (the default) is simulated here: `step` advances it and
-/// the `build_*` / `spawn_train` / `set_route` methods apply commands as
-/// player 0 right away. A remote view, handed out by `NetClient.world()`,
-/// shows the confirmed world of an online game instead: every query works
-/// the same, but the view is read-only (`step` does nothing, commands are
+/// the `build_*` / `spawn_train` / `set_route` / `found_town` methods apply
+/// commands as player 0 right away, recording why one was rejected
+/// (`last_error`). A remote view, handed out by `NetClient.world()`, shows
+/// the confirmed world of an online game instead: every query works the
+/// same, but the view is read-only (`step` does nothing, commands are
 /// refused; submit them through `NetClient`) and `balance` is that of the
 /// joined player.
 #[derive(GodotClass)]
@@ -46,7 +47,6 @@ pub struct SimWorld {
     error_count: i64,
     base: Base<RefCounted>,
 }
-
 
 #[godot_api]
 impl IRefCounted for SimWorld {
