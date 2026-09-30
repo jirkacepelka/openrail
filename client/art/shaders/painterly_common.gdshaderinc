@@ -1,4 +1,4 @@
-// Shared helpers for OpenRail's painterly ("Arcane-like") look.
+// Shared helpers for OpenRail's painterly (Arcane-inspired) look.
 // See docs/art-style.md for what each knob is for.
 
 float or_hash(vec2 p) {

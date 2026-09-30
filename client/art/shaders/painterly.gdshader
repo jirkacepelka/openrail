@@ -14,22 +14,22 @@ uniform bool use_uv_texture = false;
 uniform float alpha_scissor : hint_range(0.0, 1.0) = 0.5;
 // World units per brush pattern repeat is 1 / brush_scale.
 uniform float brush_scale = 0.08;
-uniform float value_jitter : hint_range(0.0, 1.0) = 0.3;
-uniform float hue_jitter : hint_range(0.0, 0.2) = 0.025;
+uniform float value_jitter : hint_range(0.0, 1.0) = 0.1;
+uniform float hue_jitter : hint_range(0.0, 0.2) = 0.01;
 
 group_uniforms light;
-uniform float bands : hint_range(1.0, 6.0, 1.0) = 3.0;
-uniform float band_softness : hint_range(0.0, 0.5) = 0.2;
-uniform float terminator_noise : hint_range(0.0, 1.0) = 0.35;
-// Colour the light takes on right at the light/shadow edge (Arcane's warm, saturated edge).
-uniform vec4 terminator_color : source_color = vec4(1.0, 0.45, 0.3, 1.0);
-uniform float terminator_width : hint_range(0.01, 1.0) = 0.45;
+uniform float bands : hint_range(1.0, 6.0, 1.0) = 2.0;
+uniform float band_softness : hint_range(0.0, 0.5) = 0.06;
+uniform float terminator_noise : hint_range(0.0, 1.0) = 0.12;
+// Colour the light takes on right at the light/shadow edge (a warm, slightly saturated edge).
+uniform vec4 terminator_color : source_color = vec4(1.0, 0.72, 0.5, 1.0);
+uniform float terminator_width : hint_range(0.01, 1.0) = 0.3;
 uniform float light_strength = 1.0;
 
 group_uniforms rim;
-uniform vec4 rim_color : source_color = vec4(0.75, 0.9, 1.0, 1.0);
-uniform float rim_strength : hint_range(0.0, 4.0) = 0.9;
-uniform float rim_width : hint_range(0.0, 1.0) = 0.3;
+uniform vec4 rim_color : source_color = vec4(1.0, 0.97, 0.9, 1.0);
+uniform float rim_strength : hint_range(0.0, 4.0) = 0.7;
+uniform float rim_width : hint_range(0.0, 1.0) = 0.22;
 
 group_uniforms highlight;
 uniform float gloss : hint_range(0.8, 1.0) = 0.992;

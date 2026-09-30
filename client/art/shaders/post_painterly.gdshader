@@ -2,7 +2,7 @@
 // (ArtStyle sets it up). In order:
 //   1. Kuwahara filter: flattens detail into brush-like patches of colour.
 //   2. Ink lines from depth and normal edges, tinted by the colour underneath
-//      (Arcane's lines are dark paint, not black), wobbling slightly.
+//      (dark paint, not black), with a slight hand-drawn wobble.
 //   3. Colour grade: saturation, contrast, cool shadows / warm highlights.
 //   4. Canvas grain and a vignette.
 // Everything runs in linear HDR, before Godot's tonemapper and glow.
@@ -16,31 +16,31 @@ uniform sampler2D depth_tex : hint_depth_texture, filter_nearest, repeat_disable
 uniform sampler2D normal_tex : hint_normal_roughness_texture, filter_nearest, repeat_disable;
 
 group_uniforms paint;
-uniform int kuwahara_radius : hint_range(0, 6) = 3;
-uniform float kuwahara_mix : hint_range(0.0, 1.0) = 0.85;
+uniform int kuwahara_radius : hint_range(0, 6) = 2;
+uniform float kuwahara_mix : hint_range(0.0, 1.0) = 0.5;
 
 group_uniforms ink;
-uniform float line_width : hint_range(0.5, 4.0) = 1.3;
-uniform float line_strength : hint_range(0.0, 1.0) = 0.75;
-uniform vec4 ink_color : source_color = vec4(0.12, 0.08, 0.14, 1.0);
+uniform float line_width : hint_range(0.5, 4.0) = 1.1;
+uniform float line_strength : hint_range(0.0, 1.0) = 0.8;
+uniform vec4 ink_color : source_color = vec4(0.12, 0.13, 0.17, 1.0);
 // How much of the underlying colour the ink keeps (0 = flat ink colour).
 uniform float ink_keeps_color : hint_range(0.0, 1.0) = 0.35;
 uniform float depth_threshold = 0.15;
 uniform float normal_threshold : hint_range(0.0, 1.0) = 0.35;
-uniform float line_wobble : hint_range(0.0, 3.0) = 1.0;
+uniform float line_wobble : hint_range(0.0, 3.0) = 0.3;
 // Lines fade out beyond this camera distance, so the far landscape stays soft.
 uniform float line_fade_distance = 6000.0;
 
 group_uniforms grade;
-uniform float saturation : hint_range(0.0, 2.0) = 1.12;
-uniform float contrast : hint_range(0.5, 2.0) = 1.08;
-uniform vec4 shadow_tint : source_color = vec4(0.55, 0.62, 0.9, 1.0);
-uniform vec4 highlight_tint : source_color = vec4(1.0, 0.9, 0.75, 1.0);
-uniform float split_tone_strength : hint_range(0.0, 1.0) = 0.5;
+uniform float saturation : hint_range(0.0, 2.0) = 1.0;
+uniform float contrast : hint_range(0.5, 2.0) = 1.06;
+uniform vec4 shadow_tint : source_color = vec4(0.72, 0.82, 1.0, 1.0);
+uniform vec4 highlight_tint : source_color = vec4(1.0, 0.95, 0.86, 1.0);
+uniform float split_tone_strength : hint_range(0.0, 1.0) = 0.35;
 
 group_uniforms canvas;
-uniform float grain_strength : hint_range(0.0, 0.3) = 0.06;
-uniform float vignette_strength : hint_range(0.0, 1.0) = 0.35;
+uniform float grain_strength : hint_range(0.0, 0.3) = 0.012;
+uniform float vignette_strength : hint_range(0.0, 1.0) = 0.12;
 
 void vertex() {
 	// Cover the whole screen regardless of the camera.
@@ -138,7 +138,7 @@ void fragment() {
 	float edge = max(depth_edge, normal_edge);
 	edge *= 1.0 - smoothstep(line_fade_distance * 0.5, line_fade_distance, dc);
 	// Break lines up a little, like a dry brush.
-	edge *= smoothstep(0.2, 0.5, or_noise(uv * vec2(260.0, 190.0)) + 0.35);
+	edge *= smoothstep(0.1, 0.4, or_noise(uv * vec2(260.0, 190.0)) + 0.5);
 	vec3 ink = mix(ink_color.rgb, ink_color.rgb * 0.4 + col * 0.6, ink_keeps_color) * 0.5;
 	col = mix(col, ink, edge * line_strength);
 

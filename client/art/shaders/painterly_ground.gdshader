@@ -6,20 +6,20 @@ render_mode cull_back, diffuse_lambert, specular_disabled;
 #include "res://art/shaders/painterly_common.gdshaderinc"
 
 group_uniforms paint;
-uniform vec4 color_meadow : source_color = vec4(0.42, 0.52, 0.30, 1.0);
-uniform vec4 color_dry : source_color = vec4(0.70, 0.60, 0.36, 1.0);
-uniform vec4 color_moss : source_color = vec4(0.24, 0.36, 0.28, 1.0);
+uniform vec4 color_meadow : source_color = vec4(0.42, 0.52, 0.32, 1.0);
+uniform vec4 color_dry : source_color = vec4(0.60, 0.58, 0.40, 1.0);
+uniform vec4 color_moss : source_color = vec4(0.32, 0.44, 0.32, 1.0);
 // Size of the colour washes, in world units.
 uniform float wash_size = 900.0;
 uniform float brush_scale = 0.02;
-uniform float value_jitter : hint_range(0.0, 1.0) = 0.3;
-uniform float hue_jitter : hint_range(0.0, 0.2) = 0.03;
+uniform float value_jitter : hint_range(0.0, 1.0) = 0.1;
+uniform float hue_jitter : hint_range(0.0, 0.2) = 0.01;
 
 group_uniforms light;
 uniform float bands : hint_range(1.0, 6.0, 1.0) = 3.0;
-uniform float band_softness : hint_range(0.0, 0.5) = 0.2;
-uniform float terminator_noise : hint_range(0.0, 1.0) = 0.25;
-uniform vec4 terminator_color : source_color = vec4(1.0, 0.55, 0.35, 1.0);
+uniform float band_softness : hint_range(0.0, 0.5) = 0.1;
+uniform float terminator_noise : hint_range(0.0, 1.0) = 0.1;
+uniform vec4 terminator_color : source_color = vec4(1.0, 0.75, 0.55, 1.0);
 uniform float terminator_width : hint_range(0.01, 1.0) = 0.45;
 uniform float light_strength = 1.0;
 

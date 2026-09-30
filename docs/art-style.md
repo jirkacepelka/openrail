@@ -1,9 +1,10 @@
 # OpenRail art style
 
 **Česky:** OpenRail má vypadat jako malovaný obraz, inspirovaný vizuálem
-animovaného seriálu Arcane: ručně malované textury, stylizované teplé světlo
-se studenými stíny, barevné "tušové" obrysy a jemná zrnitost plátna. Tento
-dokument popisuje pravidla stylu a jak je používat v Godotu a Blenderu.
+animovaného seriálu Arcane: denní světlo, teplé osvětlené plochy a modré
+stíny, velké čisté barevné plochy s jemným tahem štětce, ostré hrany se
+světlým okrajem a výrazné siluety. Tento dokument popisuje pravidla stylu a
+jak je používat v Godotu a Blenderu.
 Z Arcane bereme jen způsob malby a svícení, ne architekturu, prostředí ani
 motivy seriálu: domy, vozidla a krajina mají vlastní, realističtější design.
 
@@ -20,16 +21,18 @@ logos or assets; everything in OpenRail is our own and CC BY-SA 4.0.
 
 ## Pillars
 
-1. **Painted, not photographed.** Surfaces read as brushwork: hand-painted
-   albedo, value and hue shifting inside a colour, no photo textures, no
-   normal-map micro detail.
-2. **Graphic light.** Light falls in two or three clear steps. The edge
-   between light and shadow is warm and saturated; shadows are cool
-   (blue-violet), never grey or black.
-3. **Ink with colour.** Silhouettes and creases get a thin, slightly wobbly
-   line made of a darkened version of the colour underneath, not pure black.
-4. **Golden hour by default.** Low warm sun, cool sky light, a hazy warm
-   horizon. The palette is warm brass/copper/cream against teal and violet.
+1. **Painted, but clean.** Large, clean areas of colour with only subtle
+   brushwork. Hand-painted albedo, no photo textures, no normal-map micro
+   detail, and almost no noise or grain on top.
+2. **Daylight.** A bright image: warm lit surfaces, cool *blue* shadows
+   (never purple, grey or black). Light falls in two clear steps with a
+   warm edge between them.
+3. **Crisp shapes.** Simplified forms, strong silhouettes, crisp edges with a
+   light rim along them. Thin ink lines (a darkened version of the colour
+   underneath, not black) mark silhouettes and hard creases.
+4. **Rich but harmonious palette.** Cream walls, blue-grey slate roofs,
+   copper green (verdigris) and terracotta, over muted meadow greens;
+   saturated colour only for small accents.
 5. **Readable first.** It is a tycoon game: trains, tracks and stations must
    stay readable from far away. Lines fade with distance, the ground stays
    calmer than the things on it.
@@ -38,18 +41,20 @@ logos or assets; everything in OpenRail is our own and CC BY-SA 4.0.
 
 `ArtStyle.PALETTE` in `client/art/art_style.gd` is the source of truth.
 
-| Name        | Use                                   | Colour                   |
-|-------------|---------------------------------------|--------------------------|
-| `ink`       | lines, dark metal, rails              | `#1F1424`                |
-| `soot`      | track bed, chimneys, tree trunks      | `#38333D`                |
-| `brass`     | trims, rich buildings, lamps          | `#C79447`                |
-| `copper`    | roofs, locomotive details             | `#B85C38`                |
-| `cream`     | plaster walls, lit highlights         | `#EDD9B3`                |
-| `teal`      | industrial accents, rolling stock     | `#29807A`                |
-| `violet`    | shadows, night, special effects       | `#8C40B3`                |
-| `glow_blue` | emissive lamps, UI highlights         | `#4DBFF2`                |
-| `signal_red`| signals, locomotives, warnings        | `#C72E24`                |
-| `meadow`    | grass, foliage                        | `#6B854D`                |
+| Name         | Use                                  | Colour    |
+|--------------|--------------------------------------|-----------|
+| `cream`      | plaster walls, lit highlights        | `#EDD9B3` |
+| `slate`      | roofs (blue-grey slate)              | `#6B7D91` |
+| `verdigris`  | copper-green roofs, domes, trims     | `#619E8A` |
+| `terracotta` | tile roofs, brick                    | `#C7704D` |
+| `brass`      | trims, lamps, some walls             | `#C79447` |
+| `copper`     | locomotive details, pipes            | `#B85C38` |
+| `teal`       | rolling stock, industrial accents    | `#29807A` |
+| `signal_red` | signals, locomotives, warnings       | `#C72E24` |
+| `meadow`     | grass, foliage                       | `#668A52` |
+| `soot`       | track bed, chimneys, tree trunks     | `#38333D` |
+| `ink`        | lines, dark metal, rails             | `#1F212B` |
+| `glow_blue`  | emissive lamps, UI highlights        | `#4DBFF2` |
 
 Saturated colours are for small accents (signals, trims, glow); large areas
 (walls, ground, roofs seen from above) stay in the muted versions.
@@ -59,9 +64,10 @@ Saturated colours are for small accents (signals, trims, glow); large areas
 Everything lives in `client/art/`:
 
 - `art_style.tscn` / `art_style.gd`: drop this scene into a level. It brings
-  the WorldEnvironment (painted sky, cool ambient, AgX tonemap, glow, fog),
+  the WorldEnvironment (painted sky, cool ambient, Filmic tonemap, glow, fog),
   a warm key light (`Sun`) and a cool `RimLight`, and removes other
-  environments and directional lights in the scene. It attaches the
+  environments and directional lights in the scene. Lighting is daylight:
+  Filmic tonemap, a warm high sun and a cool blue ambient for shadows. It attaches the
   post-process to the active camera and repaints materials (below).
 - `shaders/painterly.gdshader`: objects. Stepped toon ramp with a
   brush-broken terminator, warm terminator colour, world-space brush strokes
@@ -140,8 +146,8 @@ the screenshot above was made.
 
 ## Performance notes
 
-The post-process costs one Kuwahara pass (`(2r+1)²` samples, 49 at the
-default radius 3) plus 10 depth/normal taps per pixel, which is fine on
-desktop GPUs at 1080p. On low-end hardware lower `kuwahara_radius` to 2 or
+The post-process costs one Kuwahara pass (`(2r+1)²` samples, 25 at the
+default radius 2) plus 10 depth/normal taps per pixel, which is fine on
+desktop GPUs at 1080p. On low-end hardware set `kuwahara_radius` to 0 or
 set `post_process = false` on ArtStyle. It needs the Forward+ renderer
 (normal-roughness buffer).

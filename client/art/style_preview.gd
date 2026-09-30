@@ -19,9 +19,9 @@ func _ready() -> void:
 		var x := -150.0 + i * 38.0 + rng.randf_range(-6, 6)
 		var z := -30.0 - rng.randf_range(0, 20)
 		var h := rng.randf_range(10, 22)
-		var wall: Color = [ArtStyle.PALETTE["cream"], ArtStyle.PALETTE["brass"], ArtStyle.PALETTE["copper"]][i % 3]
+		var wall: Color = ArtStyle.PALETTE["cream"] if i % 4 != 3 else ArtStyle.PALETTE["brass"]
 		_box(Vector3(x, h * 0.5, z), Vector3(18, h, 16), wall)
-		_roof(Vector3(x, h, z), Vector3(20, 8, 18), ArtStyle.PALETTE["copper"] if i % 3 != 2 else ArtStyle.PALETTE["teal"])
+		_roof(Vector3(x, h, z), Vector3(20, 8, 18), [ArtStyle.PALETTE["slate"], ArtStyle.PALETTE["terracotta"], ArtStyle.PALETTE["verdigris"]][i % 3])
 	# Trees.
 	for i in 24:
 		var p := Vector3(rng.randf_range(-180, 180), 0, rng.randf_range(15, 120))

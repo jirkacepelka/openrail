@@ -13,24 +13,24 @@ sky_material = SubResource("sky_mat")
 background_mode = 2
 sky = SubResource("sky")
 ambient_light_source = 2
-ambient_light_color = Color(0.42, 0.45, 0.72, 1)
-ambient_light_energy = 0.7
+ambient_light_color = Color(0.52, 0.66, 0.9, 1)
+ambient_light_energy = 0.75
 reflected_light_source = 2
-tonemap_mode = 4
-tonemap_exposure = 1.05
+tonemap_mode = 2
+tonemap_exposure = 1.0
 glow_enabled = true
-glow_intensity = 0.6
+glow_intensity = 0.4
 glow_strength = 0.9
 glow_bloom = 0.08
 glow_blend_mode = 1
 glow_hdr_threshold = 0.9
 fog_enabled = true
-fog_light_color = Color(0.9, 0.72, 0.58, 1)
-fog_density = 0.00012
+fog_light_color = Color(0.8, 0.86, 0.92, 1)
+fog_density = 0.00008
 fog_aerial_perspective = 0.35
 fog_sky_affect = 0.4
 adjustment_enabled = true
-adjustment_saturation = 1.05
+adjustment_saturation = 1.0
 
 [node name="ArtStyle" type="Node3D"]
 script = ExtResource("1_style")
@@ -39,15 +39,15 @@ script = ExtResource("1_style")
 environment = SubResource("env")
 
 [node name="Sun" type="DirectionalLight3D" parent="."]
-rotation = Vector3(-0.55, 2.27, 0)
-light_color = Color(1, 0.84, 0.66, 1)
-light_energy = 1.6
+rotation = Vector3(-0.85, 2.27, 0)
+light_color = Color(1, 0.94, 0.84, 1)
+light_energy = 1.9
 shadow_enabled = true
-shadow_blur = 1.5
+shadow_blur = 0.6
 directional_shadow_max_distance = 8000.0
 
 [node name="RimLight" type="DirectionalLight3D" parent="."]
 rotation = Vector3(-0.35, -1.0, 0)
-light_color = Color(0.55, 0.78, 1, 1)
-light_energy = 0.45
+light_color = Color(0.75, 0.85, 1, 1)
+light_energy = 0.35
 light_specular = 0.0

@@ -4,7 +4,7 @@ extends Node3D
 ##
 ## Drop art_style.tscn into a scene and it will:
 ## - take over lighting: its own WorldEnvironment (painted sky, cool ambient,
-##   AgX tonemap, glow, fog) and a warm sun; other WorldEnvironment and
+##   Filmic tonemap, glow, fog) and a warm sun; other WorldEnvironment and
 ##   DirectionalLight3D nodes in the scene are removed,
 ## - add the full-screen post-process (paint filter, ink lines, colour grade)
 ##   to the active camera,
@@ -22,15 +22,17 @@ const GROUND_SHADER := preload("res://art/shaders/painterly_ground.gdshader")
 
 ## Named colours of the palette, for gameplay code and models.
 const PALETTE := {
-	"ink": Color(0.12, 0.08, 0.14),
+	"ink": Color(0.12, 0.13, 0.17),
 	"brass": Color(0.78, 0.58, 0.28),
 	"copper": Color(0.72, 0.36, 0.22),
 	"cream": Color(0.93, 0.85, 0.7),
 	"teal": Color(0.16, 0.5, 0.48),
-	"violet": Color(0.55, 0.25, 0.7),
 	"glow_blue": Color(0.3, 0.75, 0.95),
 	"signal_red": Color(0.78, 0.18, 0.14),
-	"meadow": Color(0.42, 0.52, 0.3),
+	"meadow": Color(0.4, 0.54, 0.32),
+	"slate": Color(0.42, 0.49, 0.57),
+	"verdigris": Color(0.38, 0.62, 0.54),
+	"terracotta": Color(0.78, 0.44, 0.3),
 	"soot": Color(0.22, 0.2, 0.24),
 }
 
