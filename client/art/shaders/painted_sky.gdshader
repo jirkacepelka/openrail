@@ -4,9 +4,9 @@ shader_type sky;
 
 #include "res://art/shaders/painterly_common.gdshaderinc"
 
-uniform vec4 zenith_color : source_color = vec4(0.30, 0.52, 0.80, 1.0);
-uniform vec4 horizon_color : source_color = vec4(0.78, 0.86, 0.92, 1.0);
-uniform vec4 ground_color : source_color = vec4(0.45, 0.50, 0.52, 1.0);
+uniform vec4 zenith_color : source_color = vec4(0.22, 0.46, 0.82, 1.0);
+uniform vec4 horizon_color : source_color = vec4(0.66, 0.78, 0.90, 1.0);
+uniform vec4 ground_color : source_color = vec4(0.66, 0.78, 0.90, 1.0);
 uniform vec4 cloud_light : source_color = vec4(1.0, 0.97, 0.92, 1.0);
 uniform vec4 cloud_shadow : source_color = vec4(0.70, 0.77, 0.88, 1.0);
 uniform float cloud_cover : hint_range(0.0, 1.0) = 0.45;
@@ -20,7 +20,7 @@ uniform float energy = 1.0;
 void sky() {
 	vec3 dir = EYEDIR;
 	float h = dir.y;
-	vec3 col = mix(horizon_color.rgb, zenith_color.rgb, smoothstep(-0.02, 0.35, h));
+	vec3 col = mix(horizon_color.rgb, zenith_color.rgb, smoothstep(-0.02, 0.28, h));
 	col = mix(col, ground_color.rgb, smoothstep(0.0, -0.15, h));
 
 	vec3 sun_dir = LIGHT0_ENABLED ? LIGHT0_DIRECTION : vec3(0.0, 1.0, 0.0);

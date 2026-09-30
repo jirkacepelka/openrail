@@ -10,6 +10,12 @@ group_uniforms paint;
 uniform vec4 albedo : source_color = vec4(0.8, 0.3, 0.2, 1.0);
 uniform sampler2D albedo_texture : source_color, filter_linear_mipmap, repeat_enable, hint_default_white;
 uniform bool use_uv_texture = false;
+// Give each MultiMesh instance (e.g. each tree) one of three colours, picked
+// from its position; `albedo` is ignored then.
+uniform bool vary_per_instance = false;
+uniform vec4 instance_color_a : source_color = vec4(0.34, 0.52, 0.24, 1.0);
+uniform vec4 instance_color_b : source_color = vec4(0.46, 0.54, 0.22, 1.0);
+uniform vec4 instance_color_c : source_color = vec4(0.28, 0.46, 0.30, 1.0);
 // Cut-out foliage and similar: pixels with alpha below this are discarded.
 uniform float alpha_scissor : hint_range(0.0, 1.0) = 0.5;
 // World units per brush pattern repeat is 1 / brush_scale.
@@ -37,8 +43,17 @@ uniform float highlight_strength : hint_range(0.0, 2.0) = 0.12;
 
 varying vec3 world_pos;
 varying vec3 world_normal;
+varying vec3 instance_tint;
 
 void vertex() {
+	if (vary_per_instance) {
+		vec2 origin = MODEL_MATRIX[3].xz;
+		float r = or_hash(floor(origin * 3.0) * 0.013);
+		float v = 0.86 + 0.26 * or_hash(floor(origin * 3.0) * 0.017 + 0.5);
+		instance_tint = (r < 0.55 ? instance_color_a.rgb : r < 0.8 ? instance_color_b.rgb : instance_color_c.rgb) * v;
+	} else {
+		instance_tint = vec3(1.0);
+	}
 	world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 	world_normal = normalize((MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz);
 }
@@ -48,6 +63,9 @@ void fragment() {
 	vec4 base = albedo;
 	if (use_uv_texture) {
 		base *= texture(albedo_texture, UV);
+	}
+	if (vary_per_instance) {
+		base.rgb = instance_tint;
 	}
 	ALPHA = base.a;
 	ALPHA_SCISSOR_THRESHOLD = alpha_scissor;

@@ -79,3 +79,58 @@ float or_toon_ramp(float ndl, float attenuation, float brush, float terminator_n
 	float stepped = (floor(t) + smoothstep(0.5 - softness, 0.5 + softness, fract(t))) / bands;
 	return clamp(stepped, 0.0, 1.0);
 }
+
+// fbm with each octave rotated, so large washes don't line up into squares,
+// and with octaves finer than a pixel faded out (fw = fwidth of p), so the
+// pattern stays calm in the distance instead of turning into blotches.
+float or_fbm_soft(vec2 p, float fw, int octaves) {
+	const mat2 rot = mat2(vec2(0.80, 0.60), vec2(-0.60, 0.80));
+	float v = 0.0;
+	float a = 0.5;
+	float norm = 0.0;
+	for (int i = 0; i < octaves; i++) {
+		float keep = 1.0 - smoothstep(0.25, 0.6, fw);
+		v += a * mix(0.5, or_noise(p), keep);
+		norm += a;
+		p = rot * p * 2.07 + vec2(17.1, 9.2);
+		fw *= 2.07;
+		a *= 0.5;
+	}
+	return v / norm;
+}
+
+vec2 or_hash2(vec2 p) {
+	return vec2(or_hash(p), or_hash(p + vec2(19.19, 7.43)));
+}
+
+// Voronoi cells: .x = distance to the nearest cell edge, .yz = id of the cell.
+vec3 or_voronoi(vec2 p) {
+	vec2 n = floor(p);
+	vec2 f = fract(p);
+	vec2 best_cell = vec2(0.0);
+	vec2 best_r = vec2(8.0);
+	float best = 8.0;
+	for (int j = -1; j <= 1; j++) {
+		for (int i = -1; i <= 1; i++) {
+			vec2 g = vec2(float(i), float(j));
+			vec2 r = g + or_hash2(n + g) * 0.8 + 0.1 - f;
+			float d = dot(r, r);
+			if (d < best) {
+				best = d;
+				best_r = r;
+				best_cell = n + g;
+			}
+		}
+	}
+	float edge = 8.0;
+	for (int j = -2; j <= 2; j++) {
+		for (int i = -2; i <= 2; i++) {
+			vec2 g = vec2(float(i), float(j));
+			vec2 r = g + or_hash2(n + g) * 0.8 + 0.1 - f;
+			if (dot(best_r - r, best_r - r) > 0.00001) {
+				edge = min(edge, dot(0.5 * (best_r + r), normalize(r - best_r)));
+			}
+		}
+	}
+	return vec3(edge, best_cell);
+}
