@@ -29,7 +29,6 @@ const CS := {
 	"join.fingerprint": "Otisk certifikátu (nepovinné)",
 	"join.connect": "Připojit",
 	"join.failed": "Připojení se nezdařilo: %s",
-	"join.not_ready": "Online zatím není hotové",
 	"join.no_address": "Zadejte adresu serveru",
 	"settings.title": "Nastavení",
 	"settings.window": "Režim okna",
@@ -63,6 +62,56 @@ const CS := {
 	"lines.show": "Ukázat",
 	"lines.route": "Trasa",
 	"lines.no_route": "Bez trasy (jezdí tam a zpět po trati %d)",
+	"menu.disconnected_title": "Odpojeno od serveru",
+	"menu.disconnected": "Spojení se serverem skončilo: %s",
+	"tool.track": "Kolej",
+	"tool.station": "Stanice",
+	"tool.train": "Vlak",
+	"tool.route": "Trasa",
+	"tool.bulldoze": "Bourání",
+	"tool.bulldoze_na": "Bourání zatím není k dispozici.",
+	"tool.undo_stop": "Zpět zastávku",
+	"tool.confirm_route": "Potvrdit trasu (Enter)",
+	"node.station": "Stanice %d",
+	"node.junction": "Uzel %d",
+	"node.position": "Poloha: %d, %d m",
+	"node.tracks": "Koleje: %d",
+	"node.trains": "Vlaky: %s",
+	"node.no_trains": "žádné",
+	"hint.none": "Vyberte nástroj dole. WASD posouvá, kolečko přibližuje, prostřední tlačítko otáčí.",
+	"hint.track_start": "Klikněte na místo nebo existující uzel a začněte kolej.",
+	"hint.track_next": "Klikněte na další bod. Pravé tlačítko nebo Esc trať ukončí.",
+	"hint.track_short": "Příliš krátké. Kolej musí mít aspoň %d m.",
+	"hint.track_exists": "Mezi těmito uzly už kolej vede.",
+	"hint.track_failed": "Kolej nelze postavit%s.",
+	"hint.station": "Klikněte na uzel a udělejte z něj stanici.",
+	"hint.station_no_node": "Klikněte na uzel koleje, ze kterého má být stanice.",
+	"hint.station_exists": "Uzel %d už je stanice.",
+	"hint.station_built": "Stanice %d postavena.",
+	"hint.station_failed": "Stanici tu nelze postavit%s.",
+	"hint.train": "Klikněte na kolej a postavte na ni vlak.",
+	"hint.train_no_track": "Klikněte na kolej, kam se má vlak postavit.",
+	"hint.train_failed": "Vlak nelze postavit%s.",
+	"hint.train_track_taken": "Na této koleji už vlak je.",
+	"hint.train_placed": "Vlak %d postaven. Nástrojem Trasa ho pošlete mezi stanice.",
+	"hint.train_placed_any": "Vlak postaven. Nástrojem Trasa ho pošlete mezi stanice.",
+	"hint.route_pick": "Klikněte na vlak (nebo ho vyberte v seznamu) a pak postupně na stanice.",
+	"hint.route_stops": "Vlak %d: klikejte postupně na stanice (vybráno %d). Enter potvrdí.",
+	"hint.route_not_station": "Uzel %d není stanice. Postavte ji nástrojem Stanice.",
+	"hint.route_incomplete": "Trasa potřebuje vlak a aspoň dvě stanice.",
+	"hint.route_rejected": "Trasa byla odmítnuta%s.",
+	"hint.route_set": "Trasa vlaku %d nastavena. Vyberte další vlak nebo stiskněte Esc.",
+	"hint.waiting": "Čekám na server...",
+	"error.funds": "nedostatek peněz",
+	"error.not_owner": "patří jinému hráči",
+	"error.degenerate": "kolej musí spojovat dva různé body",
+	"error.population": "neplatný počet obyvatel",
+	"error.unknown_node": "uzel %s neexistuje",
+	"error.unknown_track": "kolej %s neexistuje",
+	"error.unknown_train": "vlak %s neexistuje",
+	"error.not_station": "uzel %s není stanice",
+	"error.occupied": "na koleji %s už vlak je",
+	"error.not_connected": "nejste připojeni",
 }
 
 const EN := {
@@ -86,7 +135,6 @@ const EN := {
 	"join.fingerprint": "Certificate fingerprint (optional)",
 	"join.connect": "Connect",
 	"join.failed": "Connection failed: %s",
-	"join.not_ready": "Online is not ready yet",
 	"join.no_address": "Enter the server address",
 	"settings.title": "Settings",
 	"settings.window": "Window mode",
@@ -120,6 +168,56 @@ const EN := {
 	"lines.show": "Show",
 	"lines.route": "Route",
 	"lines.no_route": "No route (shuttles on track %d)",
+	"menu.disconnected_title": "Disconnected",
+	"menu.disconnected": "The online game ended: %s",
+	"tool.track": "Track",
+	"tool.station": "Station",
+	"tool.train": "Train",
+	"tool.route": "Route",
+	"tool.bulldoze": "Bulldoze",
+	"tool.bulldoze_na": "Bulldoze is not available yet.",
+	"tool.undo_stop": "Undo stop",
+	"tool.confirm_route": "Confirm route (Enter)",
+	"node.station": "Station %d",
+	"node.junction": "Junction %d",
+	"node.position": "Position: %d, %d m",
+	"node.tracks": "Tracks: %d",
+	"node.trains": "Trains: %s",
+	"node.no_trains": "none",
+	"hint.none": "Pick a tool below. WASD pans, wheel zooms, middle mouse rotates.",
+	"hint.track_start": "Click a point or an existing node to start a track.",
+	"hint.track_next": "Click to place the next point. Right click or Esc ends the line.",
+	"hint.track_short": "Too short. Tracks need at least %d m.",
+	"hint.track_exists": "There is already a track between those nodes.",
+	"hint.track_failed": "Could not build that track%s.",
+	"hint.station": "Click a node to turn it into a station.",
+	"hint.station_no_node": "Click on a track node to make it a station.",
+	"hint.station_exists": "Node %d is already a station.",
+	"hint.station_built": "Station %d built.",
+	"hint.station_failed": "Could not build a station there%s.",
+	"hint.train": "Click a track to place a train.",
+	"hint.train_no_track": "Click on a track to place a train.",
+	"hint.train_failed": "Could not place a train%s.",
+	"hint.train_track_taken": "That track already has a train.",
+	"hint.train_placed": "Train %d placed. Use the Route tool to send it between stations.",
+	"hint.train_placed_any": "Train placed. Use the Route tool to send it between stations.",
+	"hint.route_pick": "Click a train (or pick one in the list), then choose stations in order.",
+	"hint.route_stops": "Train %d: click stations in order (%d chosen). Enter confirms.",
+	"hint.route_not_station": "Node %d is not a station. Build one with the Station tool.",
+	"hint.route_incomplete": "A route needs a train and at least two stations.",
+	"hint.route_rejected": "The route was rejected%s.",
+	"hint.route_set": "Route set for train %d. Select another train or press Esc.",
+	"hint.waiting": "Waiting for the server...",
+	"error.funds": "not enough money",
+	"error.not_owner": "that belongs to another player",
+	"error.degenerate": "track must join two distinct points",
+	"error.population": "invalid town population",
+	"error.unknown_node": "node %s does not exist",
+	"error.unknown_track": "track %s does not exist",
+	"error.unknown_train": "train %s does not exist",
+	"error.not_station": "node %s is not a station",
+	"error.occupied": "track %s already has a train",
+	"error.not_connected": "not connected",
 }
 
 
@@ -128,6 +226,37 @@ static func t(key: String, args: Array = []) -> String:
 	var table: Dictionary = EN if Settings.language == "en" else CS
 	var text: String = table.get(key, CS.get(key, key))
 	return text % args if not args.is_empty() else text
+
+
+## Simulation error texts (English, from `SimWorld.last_error()` or the
+## server) mapped to their keys; `%s` captures an id.
+const ERRORS := {
+	"not enough money": "error.funds",
+	"that belongs to another player": "error.not_owner",
+	"track must join two distinct points": "error.degenerate",
+	"invalid town population": "error.population",
+	"not connected": "error.not_connected",
+	"node %s does not exist": "error.unknown_node",
+	"track %s does not exist": "error.unknown_track",
+	"train %s does not exist": "error.unknown_train",
+	"node %s is not a station": "error.not_station",
+	"track %s already has a train": "error.occupied",
+}
+
+
+## Translates a simulation error text; unknown texts come back unchanged.
+static func error(text: String) -> String:
+	for pattern: String in ERRORS:
+		var parts := pattern.split("%s")
+		if parts.size() == 1:
+			if text == pattern:
+				return t(ERRORS[pattern])
+		elif text.begins_with(parts[0]) and text.ends_with(parts[1]) \
+				and text.length() > parts[0].length() + parts[1].length():
+			var id := text.substr(parts[0].length(), text.length() - parts[0].length() - parts[1].length())
+			if id.is_valid_int():
+				return t(ERRORS[pattern], [id])
+	return text
 
 
 ## Whole number with thousands separators: 2000000 -> "2 000 000".

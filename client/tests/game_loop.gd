@@ -24,12 +24,12 @@ func _initialize() -> void:
 	_check(menu.find_child("NewGameDialog", true, false) != null, "menu has the new game dialog")
 	menu.queue_free()
 
-	# The stub join fails politely while there is no network client.
+	# A join with bad input fails politely and leaves no online game behind.
 	var join_reasons: Array[String] = []
 	session.join_failed.connect(func(r: String) -> void: join_reasons.append(r))
-	session.join_server("127.0.0.1", 7878, "", "Test", "")
-	if not ResourceLoader.exists(session.REMOTE_SCRIPT):
-		_check(join_reasons == ["Online zatím není hotové"], "join stub reports failure")
+	session.join_server("127.0.0.1", 7878, "", "Test", "not-a-fingerprint")
+	_check(join_reasons.size() == 1 and session.remote == null and not session.is_remote(),
+			"a bad join reports failure (%s)" % ", ".join(join_reasons))
 
 	session.start_local(4242, 6)
 	var sim: SimWorld = session.world

@@ -2,18 +2,19 @@ extends Node
 ## Autoload `Session`: owns the current world and drives it.
 ##
 ## Local mode: the sim steps here at 10 ticks per second times the game speed.
-## Remote mode: a `RemoteSession` (res://net/remote_session.gd, written by the
-## network client job) owns the world; `poll(delta)` replaces local stepping
-## and the speed is controlled by the server.
+## Remote mode: a `RemoteSession` (res://net/remote_session.gd) owns the
+## world; its `poll(delta)` runs here every frame instead of local stepping
+## and the speed is controlled by the server. The world is then a read-only
+## view and the build tools send commands through `remote.sink`.
 
 const Loc := preload("res://game/loc.gd")
 const Settings := preload("res://game/settings.gd")
 const WorldGen := preload("res://game/world_gen.gd")
 const UITheme := preload("res://ui/ui_theme.gd")
+const RemoteSession := preload("res://net/remote_session.gd")
 
 const MENU_SCENE := "res://ui/main_menu.tscn"
 const GAME_SCENE := "res://game/game.tscn"
-const REMOTE_SCRIPT := "res://net/remote_session.gd"
 const TICK_SECONDS := 0.1 ## The sim runs at 10 Hz at 1x.
 const SPEEDS: Array[int] = [0, 1, 2, 4] ## 0 = pause
 const MAX_STEPS_PER_FRAME := 40
@@ -28,6 +29,9 @@ signal game_started
 signal join_failed(reason: String)
 signal speed_changed(speed: int)
 signal left_game
+## The online game was lost after joining (kicked, server gone). Session
+## returns to the menu; the menu shows `disconnect_reason`.
+signal disconnected(reason: String)
 
 var world: SimWorld
 var mode := Mode.NONE
@@ -35,8 +39,11 @@ var speed := 1
 var seed_value := 0
 ## Tests set this to false: no scene switching, they build the scene themselves.
 var change_scenes := true
+## The online game while connecting or playing, else null.
+var remote: RemoteSession
+## Why the last online game ended (shown once by the menu), or "".
+var disconnect_reason := ""
 
-var _remote: Object
 var _accumulator := 0.0
 
 
@@ -68,20 +75,17 @@ func start_local(seed_value_: int, towns: int) -> void:
 func join_server(address: String, port: int, password: String, player_name: String,
 		fingerprint: String) -> void:
 	_end_remote()
-	if not ResourceLoader.exists(REMOTE_SCRIPT):
-		join_failed.emit(Loc.t("join.not_ready"))
-		return
-	var script: GDScript = load(REMOTE_SCRIPT)
-	_remote = script.new()
-	if _remote is Node:
-		add_child(_remote as Node)
-	_remote.connect("status_changed", func(text: String) -> void: status_changed.emit(text))
-	_remote.connect("joined", _on_remote_joined)
-	_remote.connect("failed", _on_remote_failed)
-	_remote.call("join", address, port, password, player_name, fingerprint)
+	disconnect_reason = ""
+	var r := RemoteSession.new()
+	remote = r
+	r.status_changed.connect(func(text: String) -> void: status_changed.emit(text))
+	r.joined.connect(_on_remote_joined.bind(r))
+	r.failed.connect(_on_remote_failed.bind(r))
+	r.disconnected.connect(_on_remote_disconnected.bind(r))
+	r.join(address, port, password, player_name, fingerprint)
 
 
-## Drops the world and returns to the main menu.
+## Drops the world (leaving the server if online) and returns to the menu.
 func leave_to_menu() -> void:
 	_end_remote()
 	world = null
@@ -107,10 +111,8 @@ func advance_ticks(ticks: int) -> void:
 
 
 func _process(delta: float) -> void:
-	if mode == Mode.REMOTE:
-		if _remote != null:
-			_remote.call("poll", delta)
-			world = _remote.get("world")
+	if remote != null:
+		remote.poll(delta) # may join, fail or disconnect (signals above)
 		return
 	if mode != Mode.LOCAL or world == null or speed == 0:
 		return
@@ -124,27 +126,44 @@ func _process(delta: float) -> void:
 		_accumulator = 0.0 # cannot keep up: drop the backlog instead of spiralling
 
 
-func _on_remote_joined() -> void:
+func _on_remote_joined(r: RemoteSession) -> void:
+	if r != remote:
+		return
 	mode = Mode.REMOTE
-	world = _remote.get("world")
+	world = r.world
 	speed = 1
+	speed_changed.emit(speed)
 	game_started.emit()
 	_goto(GAME_SCENE)
 
 
-func _on_remote_failed(reason: String) -> void:
+func _on_remote_failed(reason: String, r: RemoteSession) -> void:
+	if r != remote:
+		return
 	_end_remote()
 	join_failed.emit(reason)
 
 
-func _end_remote() -> void:
-	if _remote == null:
+func _on_remote_disconnected(reason: String, r: RemoteSession) -> void:
+	if r != remote:
 		return
-	if _remote.has_method("leave"):
-		_remote.call("leave")
-	if _remote is Node:
-		(_remote as Node).queue_free()
-	_remote = null
+	disconnect_reason = reason
+	_end_remote()
+	world = null
+	mode = Mode.NONE
+	disconnected.emit(reason)
+	left_game.emit()
+	_goto(MENU_SCENE)
+
+
+func _end_remote() -> void:
+	if remote == null:
+		return
+	var r := remote
+	remote = null
+	r.leave()
+	if mode == Mode.REMOTE:
+		mode = Mode.NONE
 
 
 func _goto(path: String) -> void:

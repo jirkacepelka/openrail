@@ -24,6 +24,20 @@ func _ready() -> void:
 		session.status_changed.connect(_on_join_status)
 		session.join_failed.connect(_on_join_failed)
 	_build()
+	if session != null and session.disconnect_reason != "":
+		_show_disconnected(session.disconnect_reason)
+		session.disconnect_reason = ""
+
+
+## Tells the player why the online game they were in ended.
+func _show_disconnected(reason: String) -> void:
+	var dialog := AcceptDialog.new()
+	dialog.name = "DisconnectedDialog"
+	dialog.title = Loc.t("menu.disconnected_title")
+	dialog.dialog_text = Loc.t("menu.disconnected", [reason])
+	dialog.ok_button_text = Loc.t("common.ok")
+	add_child(dialog)
+	dialog.popup_centered.call_deferred()
 
 
 func _session() -> Node:
