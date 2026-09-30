@@ -30,8 +30,16 @@ pub enum Command {
         train: TrainId,
         stops: Vec<NodeId>,
     },
+    /// Sells a train back for part of its price. Passengers aboard are lost.
     RemoveTrain {
         train: TrainId,
+    },
+    /// Founds a town. Towns belong to nobody and cost nothing; until map
+    /// generation exists this is how scenarios and tests place them.
+    FoundTown {
+        pos: Vec2,
+        name_seed: u32,
+        population: u32,
     },
 }
 
@@ -44,6 +52,10 @@ pub enum CommandError {
     NotOwner,
     NotAStation(NodeId),
     TrackOccupied(TrackId),
+    /// The command costs more than the player's balance.
+    InsufficientFunds,
+    /// A town needs 1 to `EconomyRules::max_town_population` inhabitants.
+    InvalidPopulation,
 }
 
 impl std::fmt::Display for CommandError {
@@ -56,6 +68,8 @@ impl std::fmt::Display for CommandError {
             CommandError::NotOwner => write!(f, "that belongs to another player"),
             CommandError::NotAStation(id) => write!(f, "node {} is not a station", id.0),
             CommandError::TrackOccupied(id) => write!(f, "track {} already has a train", id.0),
+            CommandError::InsufficientFunds => write!(f, "not enough money"),
+            CommandError::InvalidPopulation => write!(f, "invalid town population"),
         }
     }
 }

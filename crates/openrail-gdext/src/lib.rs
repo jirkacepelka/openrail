@@ -164,6 +164,60 @@ impl SimWorld {
         out
     }
 
+    /// The local player's balance in whole currency units.
+    #[func]
+    fn balance(&self) -> i64 {
+        self.world.balance(LOCAL_PLAYER)
+    }
+
+    /// Today's in-game date as `YYYY-MM-DD`.
+    #[func]
+    fn date_string(&self) -> GString {
+        GString::from(self.world.date().to_string().as_str())
+    }
+
+    /// Passengers waiting at a station node, all destinations together.
+    #[func]
+    fn station_waiting(&self, node: i64) -> i64 {
+        u32::try_from(node).map_or(0, |n| i64::from(self.world.waiting_total(NodeId(n))))
+    }
+
+    /// Passengers on board a train.
+    #[func]
+    fn train_load(&self, train: i64) -> i64 {
+        u32::try_from(train).map_or(0, |t| i64::from(self.world.train_load(TrainId(t))))
+    }
+
+    /// Town centres in metres, in town id order (rendering only, lossy).
+    #[func]
+    fn town_positions(&self) -> PackedVector2Array {
+        let mut out = PackedVector2Array::new();
+        for (_, t) in self.world.towns() {
+            out.push(vector2(t.pos));
+        }
+        out
+    }
+
+    /// Town names, in the same order as `town_positions`.
+    #[func]
+    fn town_names(&self) -> PackedStringArray {
+        let mut out = PackedStringArray::new();
+        for (_, t) in self.world.towns() {
+            out.push(t.name().as_str());
+        }
+        out
+    }
+
+    /// Town populations, in the same order as `town_positions`.
+    #[func]
+    fn town_populations(&self) -> PackedInt64Array {
+        let mut out = PackedInt64Array::new();
+        for (_, t) in self.world.towns() {
+            out.push(i64::from(t.population));
+        }
+        out
+    }
+
     /// Current train positions in metres (rendering only, lossy).
     #[func]
     fn train_positions(&self) -> PackedVector2Array {
