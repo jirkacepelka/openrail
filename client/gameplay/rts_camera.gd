@@ -1,22 +1,29 @@
 extends Camera3D
 ## RTS style camera: WASD / screen edge pan, mouse wheel zoom, middle-drag
 ## (or Q/E) rotate. Attach to the existing Camera3D. The initial pose is
-## derived from the node's transform in the scene, so nothing changes visually
-## until the player moves the camera.
+## derived from the node's transform in the scene until `jump_to` is called.
+## With a `sim` the focus rides on the terrain and the camera never dips
+## below the ground.
 
 const MIN_PITCH := 0.26 # about 15 degrees
 const MAX_PITCH := 1.48 # about 85 degrees
+const Ground := preload("res://world/ground.gd")
 
 @export var pan_speed := 1.2 ## Pan speed in "distances per second".
 @export var fast_multiplier := 3.0 ## Held Shift multiplies pan speed.
 @export var edge_pan := true
 @export var edge_margin := 8.0 ## Pixels from the window border.
 @export var zoom_step := 0.88 ## Distance factor per wheel notch.
-@export var min_distance := 60.0
-@export var max_distance := 6000.0
+@export var min_distance := 50.0
+@export var max_distance := 8000.0
+## Metres the camera keeps above the ground (grows with the distance).
+@export var ground_clearance := 12.0
 @export var rotate_sensitivity := 0.005
 @export var key_rotate_speed := 1.6 ## Radians per second for Q / E.
 @export var smoothing := 12.0
+
+## World whose terrain the camera follows (null: flat ground at y = 0).
+var sim: SimWorld
 
 var focus := Vector3.ZERO
 var yaw := 0.0
@@ -51,6 +58,20 @@ func _ready() -> void:
 ## Smoothly move the view so that `world_point` is at the centre.
 func focus_on(world_point: Vector3) -> void:
 	_target_focus = Vector3(world_point.x, 0.0, world_point.z)
+
+
+## Moves the view at once: look at `world_point` (only x and z count) from
+## `p_distance` metres, `p_pitch` radians above the horizon, facing `p_yaw`.
+func jump_to(world_point: Vector3, p_yaw: float, p_pitch: float, p_distance: float) -> void:
+	focus = Vector3(world_point.x, _ground(world_point.x, world_point.z), world_point.z)
+	yaw = p_yaw
+	pitch = clampf(p_pitch, MIN_PITCH, MAX_PITCH)
+	distance = clampf(p_distance, min_distance, max_distance)
+	_target_focus = focus
+	_target_yaw = yaw
+	_target_pitch = pitch
+	_target_distance = distance
+	_apply()
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -98,6 +119,7 @@ func _process(delta: float) -> void:
 		_target_focus.z = clampf(_target_focus.z, -50000.0, 50000.0)
 
 	var t := 1.0 - exp(-smoothing * delta)
+	_target_focus.y = _ground(_target_focus.x, _target_focus.z)
 	focus = focus.lerp(_target_focus, t)
 	yaw = lerp_angle(yaw, _target_yaw, t)
 	pitch = lerpf(pitch, _target_pitch, t)
@@ -130,10 +152,21 @@ func _edge_direction() -> Vector2:
 	return dir
 
 
+func _ground(x: float, z: float) -> float:
+	return Ground.height_at(sim, x, z) if sim != null else 0.0
+
+
 func _apply() -> void:
 	var offset := Vector3(
 		sin(yaw) * cos(pitch),
 		sin(pitch),
 		cos(yaw) * cos(pitch),
 	) * distance
-	look_at_from_position(focus + offset, focus, Vector3.UP)
+	var pos := focus + offset
+	# Stay above hills between the camera and the focus.
+	var floor_y := _ground(pos.x, pos.z) + ground_clearance + distance * 0.02
+	pos.y = maxf(pos.y, floor_y)
+	# Clip planes scaled to the zoom: fine depth close up, far horizon high up.
+	near = clampf(distance * 0.002, 0.25, 20.0)
+	far = clampf(distance * 6.0 + 24000.0, 25000.0, 60000.0)
+	look_at_from_position(pos, focus, Vector3.UP)
