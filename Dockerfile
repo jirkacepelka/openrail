@@ -12,5 +12,5 @@ COPY server.example.toml /etc/openrail/server.toml
 USER openrail
 WORKDIR /data
 VOLUME /data
-EXPOSE 7878
+EXPOSE 7878/tcp 7878/udp
 ENTRYPOINT ["openrail-server", "--config", "/etc/openrail/server.toml"]

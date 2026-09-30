@@ -7,8 +7,11 @@ use std::collections::{BTreeMap, VecDeque};
 use serde::{Deserialize, Serialize};
 
 use crate::command::{Command, CommandError, PlayerId};
-use crate::network::shortest_path;
+use crate::economy::Economy;
+use crate::network::shortest_path_avoiding;
 use crate::{Fixed, SimRng, TICKS_PER_SECOND};
+
+mod econ;
 
 macro_rules! id_type {
     ($name:ident) => {
@@ -58,9 +61,13 @@ pub struct Node {
 }
 
 /// A straight track segment between two nodes. Each segment is one signal
-/// block: at most one train may be on it at a time. Two trains meeting
-/// head-on on single track wait for each other forever; passing loops and
-/// path signals that prevent this come later.
+/// block: at most one train may be on it at a time.
+///
+/// Signals work as path signals: before a train enters its next block it
+/// reserves every block up to its next stop, so two trains never meet
+/// head-on between stations. Trains prefer paths that are free right now,
+/// so parallel tracks act as passing loops and extra platforms. A single
+/// track line with trains in both directions still needs such a loop.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Track {
     pub a: NodeId,
@@ -102,7 +109,12 @@ pub struct Train {
     pub path: VecDeque<TrackId>,
     /// `true` while held at a red signal.
     pub held: bool,
+    /// `true` once every block in `path` is reserved for this train.
+    pub reserved: bool,
 }
+
+/// How often a train held at a red signal re-plans its path.
+const REPLAN_TICKS: u64 = 5 * TICKS_PER_SECOND as u64;
 
 impl Train {
     pub const MAX_SPEED: Fixed = Fixed::from_int(30);
@@ -128,6 +140,8 @@ pub struct World {
     nodes: BTreeMap<NodeId, Node>,
     tracks: BTreeMap<TrackId, Track>,
     trains: BTreeMap<TrainId, Train>,
+    /// Money, towns and passengers; see `economy` and `world::econ`.
+    economy: Economy,
 }
 
 #[derive(Debug)]
@@ -150,6 +164,7 @@ impl World {
             nodes: BTreeMap::new(),
             tracks: BTreeMap::new(),
             trains: BTreeMap::new(),
+            economy: Economy::default(),
         }
     }
 
@@ -194,6 +209,18 @@ impl World {
             .map(|(id, _)| *id)
     }
 
+    /// The train that is on a track or has reserved it, if any.
+    pub fn claimant(&self, track: TrackId) -> Option<TrainId> {
+        self.trains
+            .iter()
+            .find(|(_, t)| t.track == track || (t.reserved && t.path.contains(&track)))
+            .map(|(id, _)| *id)
+    }
+
+    fn claimed_by_other(&self, me: TrainId, track: TrackId) -> bool {
+        self.claimant(track).is_some_and(|o| o != me)
+    }
+
     fn alloc_id(&mut self) -> u32 {
         let id = self.next_id;
         self.next_id += 1;
@@ -201,8 +228,15 @@ impl World {
     }
 
     /// Validates and applies one player command. A rejected command leaves
-    /// the world untouched.
+    /// the world untouched. A player's first accepted command founds their
+    /// company with the starting money.
     pub fn apply(&mut self, player: PlayerId, cmd: &Command) -> Result<(), CommandError> {
+        self.apply_command(player, cmd)?;
+        self.economy.company_mut(player);
+        Ok(())
+    }
+
+    fn apply_command(&mut self, player: PlayerId, cmd: &Command) -> Result<(), CommandError> {
         match cmd {
             &Command::BuildNode { pos } => {
                 let id = NodeId(self.alloc_id());
@@ -225,6 +259,9 @@ impl World {
                 if length == Fixed::ZERO {
                     return Err(CommandError::DegenerateTrack);
                 }
+                let cost = self.economy.track_cost(length);
+                self.ensure_funds(player, cost)?;
+                self.economy.spend(player, cost);
                 let id = TrackId(self.alloc_id());
                 self.tracks.insert(
                     id,
@@ -239,20 +276,28 @@ impl World {
             &Command::BuildStation { node } => {
                 let n = self
                     .nodes
-                    .get_mut(&node)
+                    .get(&node)
                     .ok_or(CommandError::UnknownNode(node))?;
                 if n.owner != player {
                     return Err(CommandError::NotOwner);
                 }
-                n.station = true;
+                if !n.station {
+                    let cost = self.economy.rules.station_cost;
+                    self.ensure_funds(player, cost)?;
+                    self.economy.spend(player, cost);
+                    self.nodes.get_mut(&node).expect("checked above").station = true;
+                }
             }
             &Command::SpawnTrain { track } => {
                 if !self.tracks.contains_key(&track) {
                     return Err(CommandError::UnknownTrack(track));
                 }
-                if self.occupant(track).is_some() {
+                if self.claimant(track).is_some() {
                     return Err(CommandError::TrackOccupied(track));
                 }
+                let cost = self.economy.rules.train_cost;
+                self.ensure_funds(player, cost)?;
+                self.economy.spend(player, cost);
                 let id = TrainId(self.alloc_id());
                 self.trains.insert(
                     id,
@@ -267,6 +312,7 @@ impl World {
                         next_stop: 0,
                         path: VecDeque::new(),
                         held: false,
+                        reserved: false,
                     },
                 );
             }
@@ -292,7 +338,7 @@ impl World {
                 t.next_stop = 0;
                 // Mid-track a train cannot turn around; at rest it may.
                 let at_rest = t.speed == Fixed::ZERO;
-                self.plan(&mut t, at_rest);
+                self.plan(*train, &mut t, at_rest);
                 self.trains.insert(*train, t);
             }
             &Command::RemoveTrain { train } => {
@@ -304,25 +350,46 @@ impl World {
                     return Err(CommandError::NotOwner);
                 }
                 self.trains.remove(&train);
+                self.sell_train(train, player);
             }
+            &Command::FoundTown {
+                pos,
+                name_seed,
+                population,
+            } => self.found_town(pos, name_seed, population)?,
         }
         Ok(())
     }
 
-    /// Chooses the path to the train's next stop. With `may_reverse` the
-    /// train may also turn around on its current track if that is shorter.
-    fn plan(&self, train: &mut Train, may_reverse: bool) {
+    /// Chooses the path to the train's next stop, preferring one that no
+    /// other train holds right now. With `may_reverse` the train may also
+    /// turn around on its current track if that is shorter.
+    fn plan(&self, id: TrainId, train: &mut Train, may_reverse: bool) {
+        let free = |t: TrackId| !self.claimed_by_other(id, t);
+        if !self.plan_with(train, may_reverse, &free) {
+            self.plan_with(train, may_reverse, &|_| true);
+        }
+    }
+
+    /// Returns `false` when no path exists using only tracks `usable` allows.
+    fn plan_with(
+        &self,
+        train: &mut Train,
+        may_reverse: bool,
+        usable: &dyn Fn(TrackId) -> bool,
+    ) -> bool {
         train.path.clear();
+        train.reserved = false;
         let Some(&target) = train.stops.get(train.next_stop) else {
-            return;
+            return true;
         };
         let Some(track) = self.tracks.get(&train.track) else {
-            return;
+            return true;
         };
-        let ahead = shortest_path(&self.tracks, track.end(train.forward), target)
+        let ahead = shortest_path_avoiding(&self.tracks, track.end(train.forward), target, usable)
             .map(|(p, len)| (p, len + train.remaining(track)));
         let behind = if may_reverse {
-            shortest_path(&self.tracks, track.end(!train.forward), target)
+            shortest_path_avoiding(&self.tracks, track.end(!train.forward), target, usable)
                 .map(|(p, len)| (p, len + track.length - train.remaining(track)))
         } else {
             None
@@ -334,8 +401,9 @@ impl World {
                 train.path = p;
             }
             (Some((p, _)), None) => train.path = p,
-            (None, None) => {}
+            (None, None) => return false,
         }
+        true
     }
 
     /// Advances the simulation by one tick.
@@ -350,15 +418,26 @@ impl World {
             if train.dwell > 0 {
                 train.dwell -= 1;
                 if train.dwell == 0 {
-                    self.plan(&mut train, true);
+                    self.plan(id, &mut train, true);
                 }
                 self.trains.insert(id, train);
                 continue;
             }
 
-            // Signal ahead: red when the next block holds another train.
+            // Path signal: green once every block up to the next stop is
+            // reserved. A train held at red looks for a free way round
+            // every few seconds.
+            if train.held && self.tick % REPLAN_TICKS == 0 {
+                self.plan(id, &mut train, false);
+            }
+            if !train.reserved
+                && !train.path.is_empty()
+                && train.path.iter().all(|&t| !self.claimed_by_other(id, t))
+            {
+                train.reserved = true;
+            }
             let next = train.path.front().copied();
-            let red = next.is_some_and(|n| self.occupant(n).is_some_and(|o| o != id));
+            let red = next.is_some() && !train.reserved;
             let must_stop = next.is_none() || red;
             train.held = red && train.speed == Fixed::ZERO;
 
@@ -394,18 +473,21 @@ impl World {
                     train.held = true;
                 } else {
                     train.speed = Fixed::ZERO;
-                    self.arrive(&mut train, node);
+                    train.reserved = false;
+                    self.arrive(id, &mut train, node);
                 }
             }
             self.trains.insert(id, train);
         }
         self.tick += 1;
+        self.economy_step();
     }
 
     /// A train has stopped at the end of its path at `node`.
-    fn arrive(&mut self, train: &mut Train, node: NodeId) {
+    fn arrive(&mut self, id: TrainId, train: &mut Train, node: NodeId) {
         let at_stop = train.stops.get(train.next_stop) == Some(&node);
         if at_stop {
+            self.exchange_passengers(id, train, node);
             train.next_stop = (train.next_stop + 1) % train.stops.len();
         }
         if at_stop || train.stops.is_empty() {

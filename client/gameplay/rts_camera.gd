@@ -1,0 +1,139 @@
+extends Camera3D
+## RTS style camera: WASD / screen edge pan, mouse wheel zoom, middle-drag
+## (or Q/E) rotate. Attach to the existing Camera3D. The initial pose is
+## derived from the node's transform in the scene, so nothing changes visually
+## until the player moves the camera.
+
+const MIN_PITCH := 0.26 # about 15 degrees
+const MAX_PITCH := 1.48 # about 85 degrees
+
+@export var pan_speed := 1.2 ## Pan speed in "distances per second".
+@export var fast_multiplier := 3.0 ## Held Shift multiplies pan speed.
+@export var edge_pan := true
+@export var edge_margin := 8.0 ## Pixels from the window border.
+@export var zoom_step := 0.88 ## Distance factor per wheel notch.
+@export var min_distance := 60.0
+@export var max_distance := 6000.0
+@export var rotate_sensitivity := 0.005
+@export var key_rotate_speed := 1.6 ## Radians per second for Q / E.
+@export var smoothing := 12.0
+
+var focus := Vector3.ZERO
+var yaw := 0.0
+var pitch := 0.78
+var distance := 2000.0
+
+var _target_focus := Vector3.ZERO
+var _target_yaw := 0.0
+var _target_pitch := 0.0
+var _target_distance := 0.0
+
+
+func _ready() -> void:
+	# Derive the initial rig state from the scene transform: the focus is
+	# where the view axis meets the ground plane.
+	var origin := global_position
+	var forward := -global_transform.basis.z
+	if forward.y < -0.05:
+		distance = -origin.y / forward.y
+		focus = origin + forward * distance
+		pitch = asin(clampf(-forward.y, 0.0, 1.0))
+		yaw = atan2(-forward.x, -forward.z)
+	distance = clampf(distance, min_distance, max_distance)
+	pitch = clampf(pitch, MIN_PITCH, MAX_PITCH)
+	_target_focus = focus
+	_target_yaw = yaw
+	_target_pitch = pitch
+	_target_distance = distance
+	_apply()
+
+
+## Smoothly move the view so that `world_point` is at the centre.
+func focus_on(world_point: Vector3) -> void:
+	_target_focus = Vector3(world_point.x, 0.0, world_point.z)
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton:
+		var mb := event as InputEventMouseButton
+		if mb.pressed and mb.button_index == MOUSE_BUTTON_WHEEL_UP:
+			_target_distance = clampf(_target_distance * zoom_step, min_distance, max_distance)
+		elif mb.pressed and mb.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+			_target_distance = clampf(_target_distance / zoom_step, min_distance, max_distance)
+	elif event is InputEventMouseMotion:
+		var mm := event as InputEventMouseMotion
+		if mm.button_mask & MOUSE_BUTTON_MASK_MIDDLE:
+			_target_yaw -= mm.relative.x * rotate_sensitivity
+			_target_pitch = clampf(
+				_target_pitch + mm.relative.y * rotate_sensitivity, MIN_PITCH, MAX_PITCH
+			)
+
+
+func _process(delta: float) -> void:
+	var move := Vector2.ZERO
+	if Input.is_physical_key_pressed(KEY_W) or Input.is_physical_key_pressed(KEY_UP):
+		move.y += 1.0
+	if Input.is_physical_key_pressed(KEY_S) or Input.is_physical_key_pressed(KEY_DOWN):
+		move.y -= 1.0
+	if Input.is_physical_key_pressed(KEY_D) or Input.is_physical_key_pressed(KEY_RIGHT):
+		move.x += 1.0
+	if Input.is_physical_key_pressed(KEY_A) or Input.is_physical_key_pressed(KEY_LEFT):
+		move.x -= 1.0
+	if move == Vector2.ZERO and edge_pan:
+		move = _edge_direction()
+
+	if Input.is_physical_key_pressed(KEY_Q):
+		_target_yaw += key_rotate_speed * delta
+	if Input.is_physical_key_pressed(KEY_E):
+		_target_yaw -= key_rotate_speed * delta
+
+	if move != Vector2.ZERO:
+		var speed := pan_speed * _target_distance
+		if Input.is_physical_key_pressed(KEY_SHIFT):
+			speed *= fast_multiplier
+		var fwd := Vector3(-sin(_target_yaw), 0.0, -cos(_target_yaw))
+		var right := Vector3(cos(_target_yaw), 0.0, -sin(_target_yaw))
+		_target_focus += (right * move.x + fwd * move.y).normalized() * speed * delta
+		_target_focus.x = clampf(_target_focus.x, -50000.0, 50000.0)
+		_target_focus.z = clampf(_target_focus.z, -50000.0, 50000.0)
+
+	var t := 1.0 - exp(-smoothing * delta)
+	focus = focus.lerp(_target_focus, t)
+	yaw = lerp_angle(yaw, _target_yaw, t)
+	pitch = lerpf(pitch, _target_pitch, t)
+	distance = lerpf(distance, _target_distance, t)
+	_apply()
+
+
+func _edge_direction() -> Vector2:
+	if not edge_pan or not get_window().has_focus():
+		return Vector2.ZERO
+	if Input.mouse_mode != Input.MOUSE_MODE_VISIBLE:
+		return Vector2.ZERO
+	var vp := get_viewport()
+	# Do not scroll while the pointer is on UI such as the bottom toolbar.
+	if vp.gui_get_hovered_control() != null:
+		return Vector2.ZERO
+	var rect := vp.get_visible_rect()
+	var m := vp.get_mouse_position()
+	if not rect.has_point(m):
+		return Vector2.ZERO
+	var dir := Vector2.ZERO
+	if m.x < edge_margin:
+		dir.x -= 1.0
+	elif m.x > rect.size.x - edge_margin:
+		dir.x += 1.0
+	if m.y < edge_margin:
+		dir.y += 1.0
+	elif m.y > rect.size.y - edge_margin:
+		dir.y -= 1.0
+	return dir
+
+
+func _apply() -> void:
+	var offset := Vector3(
+		sin(yaw) * cos(pitch),
+		sin(pitch),
+		cos(yaw) * cos(pitch),
+	) * distance
+	look_at_from_position(focus + offset, focus, Vector3.UP)

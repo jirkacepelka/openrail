@@ -1,5 +1,24 @@
 # OpenRail dedicated server configuration. Pass with --config <path>.
+
+# HTTP admin API (TCP): /health, /status.
 bind = "0.0.0.0:7878"
+# Game traffic (QUIC, UDP). Same port number as the admin API is fine.
+game_bind = "0.0.0.0:7878"
+
 seed = 1
 save_path = "world.bin"
 autosave_ticks = 3000
+
+# Uncomment to require a password to join.
+# password = "change-me"
+max_players = 16
+commands_per_second = 20
+command_burst = 40
+# Extra ticks between receiving a command and executing it.
+input_delay_ticks = 0
+hash_interval_ticks = 50
+
+# Self-signed certificate and key, created on first start. Keep them:
+# clients pin the certificate fingerprint printed in the log and /status.
+cert_path = "server-cert.der"
+key_path = "server-key.der"

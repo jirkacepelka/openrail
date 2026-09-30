@@ -151,6 +151,75 @@ impl SimWorld {
         self.world.apply(LOCAL_PLAYER, &cmd).is_ok()
     }
 
+    /// All nodes as `{id, x, y, station}` (rendering and UI only, lossy).
+    #[func]
+    fn nodes(&self) -> Array<VarDictionary> {
+        let mut out = Array::new();
+        for (id, n) in self.world.nodes() {
+            let p = vector2(n.pos);
+            out.push(&vdict! {
+                "id" => i64::from(id.0),
+                "x" => p.x,
+                "y" => p.y,
+                "station" => n.station,
+            });
+        }
+        out
+    }
+
+    /// All tracks as `{id, a, b}` with node ids for `a` and `b`.
+    #[func]
+    fn tracks(&self) -> Array<VarDictionary> {
+        let mut out = Array::new();
+        for (id, t) in self.world.tracks() {
+            out.push(&vdict! {
+                "id" => i64::from(id.0),
+                "a" => i64::from(t.a.0),
+                "b" => i64::from(t.b.0),
+            });
+        }
+        out
+    }
+
+    /// All trains as `{id, track, stops, x, y}` where `stops` is a
+    /// `PackedInt64Array` of station node ids (empty in shuttle mode).
+    #[func]
+    fn trains(&self) -> Array<VarDictionary> {
+        let mut out = Array::new();
+        for (id, t) in self.world.trains() {
+            let stops: PackedInt64Array = t.stops.iter().map(|s| i64::from(s.0)).collect();
+            let p = self
+                .world
+                .train_position(id)
+                .map(vector2)
+                .unwrap_or_default();
+            out.push(&vdict! {
+                "id" => i64::from(id.0),
+                "track" => i64::from(t.track.0),
+                "stops" => &stops,
+                "x" => p.x,
+                "y" => p.y,
+            });
+        }
+        out
+    }
+
+    /// Id of the node closest to (x, y) within `radius` metres, or -1.
+    /// Ties go to the lowest id. Used for UI snapping only.
+    #[func]
+    fn nearest_node(&self, x: f64, y: f64, radius: f64) -> i64 {
+        let mut best: Option<(f64, u32)> = None;
+        for (id, n) in self.world.nodes() {
+            let dx = n.pos.x.to_f64_lossy() - x;
+            let dy = n.pos.y.to_f64_lossy() - y;
+            let d = (dx * dx + dy * dy).sqrt();
+            if d <= radius && best.map_or(true, |(bd, _)| d < bd) {
+                best = Some((d, id.0));
+            }
+        }
+        best.map_or(-1, |(_, id)| i64::from(id))
+    }
+
     /// Track end points in metres, two entries per track (rendering only).
     #[func]
     fn track_segments(&self) -> PackedVector2Array {
@@ -160,6 +229,60 @@ impl SimWorld {
         for (_, t) in self.world.tracks() {
             out.push(vector2(pos[&t.a]));
             out.push(vector2(pos[&t.b]));
+        }
+        out
+    }
+
+    /// The local player's balance in whole currency units.
+    #[func]
+    fn balance(&self) -> i64 {
+        self.world.balance(LOCAL_PLAYER)
+    }
+
+    /// Today's in-game date as `YYYY-MM-DD`.
+    #[func]
+    fn date_string(&self) -> GString {
+        GString::from(self.world.date().to_string().as_str())
+    }
+
+    /// Passengers waiting at a station node, all destinations together.
+    #[func]
+    fn station_waiting(&self, node: i64) -> i64 {
+        u32::try_from(node).map_or(0, |n| i64::from(self.world.waiting_total(NodeId(n))))
+    }
+
+    /// Passengers on board a train.
+    #[func]
+    fn train_load(&self, train: i64) -> i64 {
+        u32::try_from(train).map_or(0, |t| i64::from(self.world.train_load(TrainId(t))))
+    }
+
+    /// Town centres in metres, in town id order (rendering only, lossy).
+    #[func]
+    fn town_positions(&self) -> PackedVector2Array {
+        let mut out = PackedVector2Array::new();
+        for (_, t) in self.world.towns() {
+            out.push(vector2(t.pos));
+        }
+        out
+    }
+
+    /// Town names, in the same order as `town_positions`.
+    #[func]
+    fn town_names(&self) -> PackedStringArray {
+        let mut out = PackedStringArray::new();
+        for (_, t) in self.world.towns() {
+            out.push(t.name().as_str());
+        }
+        out
+    }
+
+    /// Town populations, in the same order as `town_positions`.
+    #[func]
+    fn town_populations(&self) -> PackedInt64Array {
+        let mut out = PackedInt64Array::new();
+        for (_, t) in self.world.towns() {
+            out.push(i64::from(t.population));
         }
         out
     }
