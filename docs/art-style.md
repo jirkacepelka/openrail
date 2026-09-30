@@ -4,13 +4,18 @@
 animovaného seriálu Arcane: ručně malované textury, stylizované teplé světlo
 se studenými stíny, barevné "tušové" obrysy a jemná zrnitost plátna. Tento
 dokument popisuje pravidla stylu a jak je používat v Godotu a Blenderu.
+Z Arcane bereme jen způsob malby a svícení, ne architekturu, prostředí ani
+motivy seriálu: domy, vozidla a krajina mají vlastní, realističtější design.
 
 ![Style preview scene](img/style-preview.png)
 
 *`client/art/style_preview.tscn`, rendered with `client/tools/screenshot.gd`.*
 
-We take inspiration from the *look* of Arcane (painted textures, graphic
-lighting, colour-rich shadows). We don't copy its characters, locations,
+We take inspiration only from Arcane's *rendering technique* (painted
+textures, graphic lighting, colour-rich shadows, coloured ink lines). Its
+architecture, setting, technology and motifs are out of scope: OpenRail's
+buildings, vehicles and landscapes follow their own, real-world-grounded
+design, just painted this way. We don't copy its characters, locations,
 logos or assets; everything in OpenRail is our own and CC BY-SA 4.0.
 
 ## Pillars
