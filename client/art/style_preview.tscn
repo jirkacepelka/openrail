@@ -1,0 +1,14 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://art/style_preview.gd" id="1_preview"]
+[ext_resource type="PackedScene" path="res://art/art_style.tscn" id="2_art"]
+
+[node name="StylePreview" type="Node3D"]
+script = ExtResource("1_preview")
+
+[node name="Camera3D" type="Camera3D" parent="."]
+transform = Transform3D(0.94, -0.13, 0.31, 0, 0.92, 0.39, -0.34, -0.36, 0.86, 70, 60, 140)
+fov = 50.0
+far = 20000.0
+
+[node name="ArtStyle" parent="." instance=ExtResource("2_art")]

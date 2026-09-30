@@ -33,3 +33,34 @@ jobs:
       - name: Build GDExtension
         if: matrix.os == 'ubuntu-latest'
         run: cargo build -p openrail-gdext
+
+  godot-smoke:
+    runs-on: ubuntu-latest
+    env:
+      GODOT_VERSION: 4.4.1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build -p openrail-gdext
+      - name: Build the dedicated server (for the online tests)
+        run: cargo build -p openrail-server
+      - name: Copy GDExtension into the Godot project
+        run: tools/copy-gdext.sh debug
+      - name: Install Godot
+        run: |
+          curl -sSL -o godot.zip "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip"
+          unzip -q godot.zip
+          mv "Godot_v${GODOT_VERSION}-stable_linux.x86_64" godot
+      - name: Import project
+        run: ./godot --headless --import --path client
+      - name: Build tools smoke test
+        run: ./godot --headless --path client --script res://tests/smoke_build.gd
+      - name: Game loop test
+        run: ./godot --headless --path client --script res://tests/game_loop.gd
+      - name: Online smoke test
+        run: ./godot --headless --path client --script res://tests/smoke_net.gd
+      - name: Online game test (menu, join, build, leave)
+        run: ./godot --headless --path client --script res://tests/online_game.gd

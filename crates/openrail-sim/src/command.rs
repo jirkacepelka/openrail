@@ -10,10 +10,37 @@ pub struct PlayerId(pub u16);
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Command {
-    BuildNode { pos: Vec2 },
-    BuildTrack { a: NodeId, b: NodeId },
-    SpawnTrain { track: TrackId },
-    RemoveTrain { train: TrainId },
+    BuildNode {
+        pos: Vec2,
+    },
+    BuildTrack {
+        a: NodeId,
+        b: NodeId,
+    },
+    /// Turns a node the player owns into a station.
+    BuildStation {
+        node: NodeId,
+    },
+    SpawnTrain {
+        track: TrackId,
+    },
+    /// Sends a train around these stations in a loop. An empty list puts
+    /// it back into shuttle mode.
+    SetRoute {
+        train: TrainId,
+        stops: Vec<NodeId>,
+    },
+    /// Sells a train back for part of its price. Passengers aboard are lost.
+    RemoveTrain {
+        train: TrainId,
+    },
+    /// Founds a town. Towns belong to nobody and cost nothing; until map
+    /// generation exists this is how scenarios and tests place them.
+    FoundTown {
+        pos: Vec2,
+        name_seed: u32,
+        population: u32,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -23,6 +50,12 @@ pub enum CommandError {
     UnknownTrain(TrainId),
     DegenerateTrack,
     NotOwner,
+    NotAStation(NodeId),
+    TrackOccupied(TrackId),
+    /// The command costs more than the player's balance.
+    InsufficientFunds,
+    /// A town needs 1 to `EconomyRules::max_town_population` inhabitants.
+    InvalidPopulation,
 }
 
 impl std::fmt::Display for CommandError {
@@ -33,6 +66,10 @@ impl std::fmt::Display for CommandError {
             CommandError::UnknownTrain(id) => write!(f, "train {} does not exist", id.0),
             CommandError::DegenerateTrack => write!(f, "track must join two distinct points"),
             CommandError::NotOwner => write!(f, "that belongs to another player"),
+            CommandError::NotAStation(id) => write!(f, "node {} is not a station", id.0),
+            CommandError::TrackOccupied(id) => write!(f, "track {} already has a train", id.0),
+            CommandError::InsufficientFunds => write!(f, "not enough money"),
+            CommandError::InvalidPopulation => write!(f, "invalid town population"),
         }
     }
 }

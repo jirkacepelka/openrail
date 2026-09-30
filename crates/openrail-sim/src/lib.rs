@@ -4,13 +4,18 @@
 //! crate. Given the same seed and the same commands, every machine reaches
 //! the same state, so multiplayer only needs to send commands.
 
+pub mod calendar;
 pub mod command;
+pub mod economy;
 pub mod fixed;
+pub mod network;
 pub mod replay;
 pub mod rng;
 pub mod world;
 
+pub use calendar::{Date, TICKS_PER_DAY, TICKS_PER_HOUR};
 pub use command::{Command, CommandError, PlayerId};
+pub use economy::{Company, EconomyRules, Money, Town, TownId, TrainCargo};
 pub use fixed::Fixed;
 pub use replay::{Replay, ScheduledCommand};
 pub use rng::SimRng;
