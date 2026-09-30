@@ -10,6 +10,8 @@ pub struct Config {
     /// Game traffic (QUIC over UDP). May share the port number with `bind`
     /// since one is TCP and the other UDP.
     pub game_bind: String,
+    /// Seed of a new world. The terrain is computed from it and is not in
+    /// the save, so keep it when continuing a saved world.
     pub seed: u64,
     pub save_path: String,
     pub autosave_ticks: u64,
@@ -59,6 +61,7 @@ impl Config {
             hash_interval: self.hash_interval_ticks,
             commands_per_second: self.commands_per_second,
             command_burst: self.command_burst,
+            terrain_seed: self.seed,
             ..openrail_net::HostConfig::default()
         }
     }

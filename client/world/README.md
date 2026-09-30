@@ -1,4 +1,4 @@
-# World: towns and ground
+# World: terrain, tracks and towns
 
 Client-side scenery generated from the simulation's state. Nothing here
 changes the simulation or its hash: it only reads `SimWorld` getters.
@@ -6,9 +6,62 @@ changes the simulation or its hash: it only reads `SimWorld` getters.
 ## Ground height (`ground.gd`)
 
 `Ground.height_at(sim, x, z)` is the one place that knows the ground height
-at Godot (x, z) (sim (x, y)). Everything placed on the land asks it. Until the
-terrain lands, the file is a fallback that returns 0 (flat world); the
-terrain replaces it with the real height field and the towns follow.
+at Godot (x, z) (sim (x, y)). Everything placed on the land asks it. It calls
+`SimWorld.terrain_height`, a pure function of the world seed computed in
+`openrail-sim` (`terrain.rs`, fixed point), so the client, the server and
+every remote view (the seed comes with the server's Welcome) agree exactly.
+The terrain is not part of the world state. Also: `point_at`,
+`normal_at`, `slope_at`, `is_water`, `water_level`.
+
+For many points at once use `SimWorld.terrain_heights_at(points)` (a
+`PackedVector2Array` of sim positions) or `terrain_heights(x0, y0, step, nx,
+ny)` (a grid, row by row, x fastest); `terrain_wetness` gives the wetness
+on the same grid.
+
+The landscape: plains at 20 to 80 m with rolling hills, hilly regions up to
+about 250 m, a few lakes and one river through a wide valley. Everything
+below `terrain_water_level()` (12 m) is water; `terrain.gd` draws one water
+surface at that height.
+
+## Terrain mesh (`terrain.gd`)
+
+A quadtree of square chunks around the camera: 8192 m cells far away,
+split into 2048 m and then 512 m cells as the camera gets closer. Each chunk
+is a heightfield grid of at most 33 x 33 vertices: 16 or 32 m spacing for
+512 m chunks, 64 or 128 m for 2048 m chunks, 256 m beyond. Skirts hang from
+every chunk edge to hide cracks between levels. Chunks are rebuilt a few per frame, nearest first
+(`budget_ms`); `build_all_now()` finishes at once (tests, screenshots). The
+material is the painterly ground shader (`art/shaders/painterly_ground.gdshader`).
+
+### Vertex data for terrain shading
+
+Every terrain vertex carries, for the art team's shader:
+
+| Attribute | Content |
+| --- | --- |
+| `VERTEX` | position relative to the chunk corner (`MODEL_MATRIX` gives world space) |
+| `NORMAL` | smooth normal from the height field (matches across chunks of the same level) |
+| `UV` | world (x, z) / 100: one UV unit per 100 m, continuous over all chunks |
+| `COLOR.r` | height normalised: 0 at 0 m, 1 at 250 m (clamped) |
+| `COLOR.g` | slope as rise over run, clamped to 0..1 (1 = 45 degrees or steeper) |
+| `COLOR.b` | wetness 0..1: 1 at the river and lake shores, fading over about 900 m, plus some large-scale moisture variation |
+| `COLOR.a` | always 1 |
+| `CUSTOM0` (RGBA float) | unclamped: height in metres, slope (rise over run), wetness, water depth in metres (0 above water) |
+
+In a spatial shader: `COLOR` as usual, `CUSTOM0` for the raw values. Skirt
+vertices copy the data of the edge vertex above them. Typical uses: rock on
+`COLOR.g > 0.35`, lush grass and reeds on high `COLOR.b`, sand or mud where
+`CUSTOM0.w` is small but positive, drier colours with height.
+
+## Tracks (`track_mesh.gd`)
+
+Each straight sim track is drawn as a ballast bed (its sides meet the
+ground beside the track), two rails and sleepers (a `MultiMesh`), following
+the terrain every 10 m; over water it stays 1.5 m above the surface. The
+simulation still measures tracks in 2D. Materials `M_Ballast`, `M_Rail`,
+`M_Sleeper` (and `M_Water` for the water surface) are plain
+`StandardMaterial3D`s that `ArtStyle` repaints; save
+`client/art/materials/M_<name>.tres` to restyle one.
 
 ## Towns (`towns*.gd`)
 

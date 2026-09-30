@@ -2,13 +2,22 @@ extends MeshInstance3D
 ## Immediate-mode line overlay for the build tools: node markers, hover ring,
 ## ghost track preview and route draft. Placeholder look; the visuals team
 ## will restyle. Usage per frame: begin(), line()/ring()/square() calls, end().
+##
+## Lines are draped over the terrain: the y of the points passed in is
+## ignored, long lines are split into short pieces and every vertex sits
+## `HEIGHT` metres above the ground (all heights fetched in one batch in end()).
 
 const RING_SEGMENTS := 20
-const HEIGHT := 1.5 ## Slightly above the ground plane, in metres.
+const HEIGHT := 1.5 ## Metres above the ground.
+const MAX_PIECE := 12.0 ## Longest straight piece of a draped line, in metres.
+const MAX_PIECES := 400 ## Per line, so a huge line cannot stall a frame.
+
+## World whose terrain the lines follow; null draws on the y = 0 plane.
+var sim: SimWorld
 
 var _imm := ImmediateMesh.new()
-var _open := false
-var _count := 0
+var _points := PackedVector2Array() ## Pairs of line ends, sim metres.
+var _colors := PackedColorArray() ## One per pair.
 
 
 func _ready() -> void:
@@ -24,19 +33,23 @@ func _ready() -> void:
 
 func begin() -> void:
 	_imm.clear_surfaces()
-	_open = false
-	_count = 0
+	_points.clear()
+	_colors.clear()
 
 
 func line(a: Vector3, b: Vector3, color: Color) -> void:
-	if not _open:
-		_imm.surface_begin(Mesh.PRIMITIVE_LINES)
-		_open = true
-	_imm.surface_set_color(color)
-	_imm.surface_add_vertex(Vector3(a.x, HEIGHT, a.z))
-	_imm.surface_set_color(color)
-	_imm.surface_add_vertex(Vector3(b.x, HEIGHT, b.z))
-	_count += 1
+	var pa := Vector2(a.x, a.z)
+	var pb := Vector2(b.x, b.z)
+	var pieces := clampi(ceili(pa.distance_to(pb) / MAX_PIECE), 1, MAX_PIECES)
+	if sim == null:
+		pieces = 1
+	var prev := pa
+	for i in range(1, pieces + 1):
+		var next := pa.lerp(pb, float(i) / float(pieces))
+		_points.append(prev)
+		_points.append(next)
+		_colors.append(color)
+		prev = next
 
 
 func ring(center: Vector3, radius: float, color: Color) -> void:
@@ -60,6 +73,15 @@ func square(center: Vector3, half: float, color: Color) -> void:
 
 
 func end() -> void:
-	if _open:
-		_imm.surface_end()
-		_open = false
+	if _points.is_empty():
+		return # a surface without vertices is an engine error
+	var heights := PackedFloat32Array()
+	if sim != null:
+		heights = sim.terrain_heights_at(_points)
+	_imm.surface_begin(Mesh.PRIMITIVE_LINES)
+	for i in _points.size():
+		var p := _points[i]
+		var y := (heights[i] if sim != null else 0.0) + HEIGHT
+		_imm.surface_set_color(_colors[i / 2])
+		_imm.surface_add_vertex(Vector3(p.x, y, p.y))
+	_imm.surface_end()

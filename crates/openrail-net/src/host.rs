@@ -41,6 +41,9 @@ pub struct HostConfig {
     /// Rate-limited messages tolerated in a row before the player is
     /// kicked.
     pub kick_after_rate_limited: u32,
+    /// Seed the world was created from; clients compute the terrain from
+    /// it (see `openrail_sim::terrain`).
+    pub terrain_seed: u64,
 }
 
 impl Default for HostConfig {
@@ -53,6 +56,7 @@ impl Default for HostConfig {
             commands_per_second: 20,
             command_burst: 40,
             kick_after_rate_limited: 200,
+            terrain_seed: 0,
         }
     }
 }
@@ -372,6 +376,7 @@ impl LockstepHost {
                 player_id: player,
                 tick: self.world.tick(),
                 snapshot: self.world.save(),
+                terrain_seed: self.cfg.terrain_seed,
                 hash_interval: self.cfg.hash_interval,
                 players,
             },
