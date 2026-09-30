@@ -3,26 +3,25 @@ extends Node3D
 ##
 ## Heights come from the simulation (`SimWorld.terrain_heights`), so the
 ## ground matches picking and placement exactly at the grid points. The
-## world is cut into square chunks; each chunk is a grid mesh whose spacing
-## grows with its distance to the camera (a few levels of detail), with a
-## skirt hanging down its edges to hide cracks between levels. Chunks are
-## (re)built a few per frame, nearest first, within a time budget. Far from
-## the camera, bigger far chunks cover the ground with fewer meshes.
+## ground is covered by a quadtree of square chunks: 8192 m cells far away,
+## split into 2048 m and then 512 m cells near the camera. Every chunk is a
+## grid mesh of at most 33 x 33 vertices whose spacing grows with its size
+## and distance (16 m close up, 256 m on the horizon), with a skirt hanging
+## down its edges to hide cracks between levels. Chunks are (re)built a few
+## per frame, nearest first, within a time budget.
 ##
 ## Every vertex carries data for the terrain shader; see world/README.md.
 
 const GROUND_SHADER := preload("res://art/shaders/painterly_ground.gdshader")
 
-const CHUNK_SIZE := 1024.0 ## Metres per near chunk side.
-const FAR_CHUNKS := 4 ## A far chunk covers FAR_CHUNKS x FAR_CHUNKS near chunks.
-## Grid spacing in metres per level of detail (0 = nearest). Levels 0 to 2
-## are near chunks, 3 and 4 far chunks.
-const LOD_STEPS: Array[float] = [16.0, 32.0, 64.0, 128.0, 256.0]
-## Camera distance up to which near levels 0 and 1 are used (level 2 beyond).
-const LOD_DISTANCES: Array[float] = [2200.0, 4500.0]
-## Far chunks are used from this distance, the coarsest level beyond FAR_COARSE.
-const FAR_SPLIT := 8000.0
-const FAR_COARSE := 16000.0
+## Chunk sizes of the quadtree levels, smallest first; each level splits
+## into 4 x 4 chunks of the one below.
+const LEVEL_SIZES: Array[float] = [512.0, 2048.0, 8192.0]
+## A chunk of a level is split when the camera is closer than this.
+const LEVEL_SPLIT: Array[float] = [0.0, 3000.0, 12000.0]
+## Grid spacing per level: near and far (from LEVEL_COARSE on).
+const LEVEL_STEPS: Array[Vector2] = [Vector2(16, 32), Vector2(64, 128), Vector2(256, 256)]
+const LEVEL_COARSE: Array[float] = [1500.0, 7000.0, 0.0]
 const HEIGHT_NORM := 250.0 ## Height mapped to 1.0 in COLOR.r.
 const UV_SCALE := 100.0 ## Metres per UV unit (UV = world xz / UV_SCALE).
 const MIN_RADIUS := 12000.0
@@ -36,7 +35,7 @@ var camera: Camera3D
 var material: ShaderMaterial
 var water: MeshInstance3D
 
-var _chunks := {} ## Vector3i (x, z, size level) -> {"lod": int, "node": MeshInstance3D}
+var _chunks := {} ## Vector3i (x, z, level) -> {"step": float, "node": MeshInstance3D}
 var _water_level := 0.0
 
 
@@ -66,8 +65,8 @@ func chunk_count() -> int:
 
 
 ## Adds, rebuilds and drops chunks for the current camera, spending at most
-## `budget` milliseconds on building. Far away, one far chunk replaces
-## FAR_CHUNKS x FAR_CHUNKS near chunks; the two never overlap.
+## `budget` milliseconds on building. A chunk that is no longer wanted stays
+## until the chunks replacing it are built, so the ground never has holes.
 func update_chunks(budget: float) -> void:
 	var cam := camera.global_position
 	var ground := sim.terrain_height(cam.x, cam.z)
@@ -75,40 +74,63 @@ func update_chunks(budget: float) -> void:
 	var radius := clampf(9000.0 + above * 3.0, MIN_RADIUS, MAX_RADIUS)
 	_place_water(cam, radius)
 
-	var far_size := CHUNK_SIZE * FAR_CHUNKS
-	var s0 := Vector2i(floori((cam.x - radius) / far_size), floori((cam.z - radius) / far_size))
-	var s1 := Vector2i(floori((cam.x + radius) / far_size), floori((cam.z + radius) / far_size))
+	var top := LEVEL_SIZES.size() - 1
+	var size := LEVEL_SIZES[top]
+	var c0 := Vector2i(floori((cam.x - radius) / size), floori((cam.z - radius) / size))
+	var c1 := Vector2i(floori((cam.x + radius) / size), floori((cam.z + radius) / size))
 	var wanted := {}
-	var todo: Array = [] # [distance, key, lod]
-	for sz in range(s0.y, s1.y + 1):
-		for sx in range(s0.x, s1.x + 1):
-			var d := _distance(cam, ground, Vector2(sx, sz) * far_size, far_size)
-			if d > radius:
-				continue
-			if d >= FAR_SPLIT:
-				_want(Vector3i(sx, sz, 1), 4 if d >= FAR_COARSE else 3, d, wanted, todo)
-				continue
-			for cz in range(sz * FAR_CHUNKS, (sz + 1) * FAR_CHUNKS):
-				for cx in range(sx * FAR_CHUNKS, (sx + 1) * FAR_CHUNKS):
-					var dc := _distance(cam, ground, Vector2(cx, cz) * CHUNK_SIZE, CHUNK_SIZE)
-					_want(Vector3i(cx, cz, 0), _lod_for(dc), dc, wanted, todo)
-	for key: Vector3i in _chunks.keys():
-		if not wanted.has(key):
-			(_chunks[key]["node"] as Node).queue_free()
-			_chunks.erase(key)
+	var todo: Array = [] # [distance, key, step]
+	for cz in range(c0.y, c1.y + 1):
+		for cx in range(c0.x, c1.x + 1):
+			_select(Vector3i(cx, cz, top), cam, ground, radius, wanted, todo)
 	todo.sort_custom(func(a: Array, b: Array) -> bool: return a[0] < b[0])
 	var start := Time.get_ticks_usec()
+	var pending: Array[Rect2] = []
 	for item: Array in todo:
 		if float(Time.get_ticks_usec() - start) / 1000.0 > budget:
-			break
+			pending.append(_rect(item[1]))
+			continue
 		_build_chunk(item[1], item[2])
+	for key: Vector3i in _chunks.keys():
+		if wanted.has(key):
+			continue
+		var r := _rect(key)
+		var covered := true
+		for p in pending:
+			if p.intersects(r):
+				covered = false
+				break
+		if covered:
+			(_chunks[key]["node"] as Node).queue_free()
+			_chunks.erase(key)
 
 
-func _want(key: Vector3i, lod: int, d: float, wanted: Dictionary, todo: Array) -> void:
+## Wants chunk `key` (x, z, level) or, when the camera is close, its
+## 4 x 4 children.
+func _select(key: Vector3i, cam: Vector3, ground: float, radius: float,
+		wanted: Dictionary, todo: Array) -> void:
+	var size := LEVEL_SIZES[key.z]
+	var d := _distance(cam, ground, Vector2(key.x, key.y) * size, size)
+	if d > radius:
+		return
+	if key.z > 0 and d < LEVEL_SPLIT[key.z]:
+		for iz in 4:
+			for ix in 4:
+				_select(Vector3i(key.x * 4 + ix, key.y * 4 + iz, key.z - 1), cam, ground, radius,
+						wanted, todo)
+		return
+	var steps := LEVEL_STEPS[key.z]
+	var step := steps.x if d < LEVEL_COARSE[key.z] else steps.y
 	wanted[key] = true
 	var have: Dictionary = _chunks.get(key, {})
-	if have.is_empty() or int(have["lod"]) != lod:
-		todo.append([d, key, lod])
+	if have.is_empty() or float(have["step"]) != step:
+		todo.append([d, key, step])
+
+
+func _rect(key: Vector3i) -> Rect2:
+	var size := LEVEL_SIZES[key.z]
+	# Shrunk a little so neighbours sharing an edge do not count as overlapping.
+	return Rect2(Vector2(key.x, key.y) * size, Vector2(size, size)).grow(-1.0)
 
 
 ## Distance from the camera to the nearest point of the square at `corner`
@@ -119,30 +141,21 @@ static func _distance(cam: Vector3, ground: float, corner: Vector2, size: float)
 	return Vector3(dx, cam.y - ground, dz).length()
 
 
-func _lod_for(distance: float) -> int:
-	for i in LOD_DISTANCES.size():
-		if distance < LOD_DISTANCES[i]:
-			return i
-	return LOD_DISTANCES.size()
-
-
-## Chunk `key` is (x, z, size level): level 0 is a near chunk of
-## CHUNK_SIZE, level 1 a far chunk of CHUNK_SIZE * FAR_CHUNKS.
-func _build_chunk(key: Vector3i, lod: int) -> void:
-	var size := CHUNK_SIZE * (FAR_CHUNKS if key.z == 1 else 1)
+func _build_chunk(key: Vector3i, step: float) -> void:
+	var size := LEVEL_SIZES[key.z]
 	var node := MeshInstance3D.new()
 	node.name = "Chunk_%d_%d_%d" % [key.x, key.y, key.z]
 	node.position = Vector3(key.x * size, 0.0, key.y * size)
-	node.mesh = build_chunk_mesh(Vector2(key.x, key.y) * size, size, LOD_STEPS[lod])
+	node.mesh = build_chunk_mesh(Vector2(key.x, key.y) * size, size, step)
 	node.material_override = material
-	# Only the nearest levels are worth shadow maps.
-	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if lod <= 1 \
+	# Only the nearest chunks are worth shadow maps.
+	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if key.z == 0 \
 			else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(node)
 	var old: Dictionary = _chunks.get(key, {})
 	if not old.is_empty():
 		(old["node"] as Node).queue_free()
-	_chunks[key] = {"lod": lod, "node": node}
+	_chunks[key] = {"step": step, "node": node}
 
 
 ## The mesh of the square with its corner at world `corner` (x, z) and side

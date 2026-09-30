@@ -25,10 +25,11 @@ surface at that height.
 
 ## Terrain mesh (`terrain.gd`)
 
-Square chunks of 1024 m around the camera, each a heightfield grid with
-16, 32 or 64 m spacing by distance; beyond 8 km one chunk covers 4096 m at
-128 or 256 m spacing. Skirts hang from every chunk edge to hide cracks
-between levels. Chunks are rebuilt a few per frame, nearest first
+A quadtree of square chunks around the camera: 8192 m cells far away,
+split into 2048 m and then 512 m cells as the camera gets closer. Each chunk
+is a heightfield grid of at most 33 x 33 vertices: 16 or 32 m spacing for
+512 m chunks, 64 or 128 m for 2048 m chunks, 256 m beyond. Skirts hang from
+every chunk edge to hide cracks between levels. Chunks are rebuilt a few per frame, nearest first
 (`budget_ms`); `build_all_now()` finishes at once (tests, screenshots). The
 material is the painterly ground shader (`art/shaders/painterly_ground.gdshader`).
 
