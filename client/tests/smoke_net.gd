@@ -1,7 +1,6 @@
 extends SceneTree
 ## Headless online smoke test: starts the dedicated server
-## (target/debug/openrail-server, built with cargo if missing) on a free
-## port with a throwaway config, joins it through RemoteSession with the
+## (see tests/test_server.gd), joins it through RemoteSession with the
 ## certificate pinned, builds a line with the build tools through the
 ## remote command sink and checks that the train moves.
 ## Run: godot --headless --path client --script res://tests/smoke_net.gd
@@ -9,13 +8,13 @@ extends SceneTree
 const Tools := preload("res://gameplay/tools.gd")
 const GameplayRoot := preload("res://gameplay/gameplay_root.gd")
 const RemoteSession := preload("res://net/remote_session.gd")
+const TestServer := preload("res://tests/test_server.gd")
 
 const PASSWORD := "smoke"
 const TIMEOUT_MS := 30000
 
 var failures := 0
-var server_pid := -1
-var temp_dir := ""
+var server: TestServer
 var session: RemoteSession
 var controller: Node
 
@@ -24,58 +23,18 @@ func _initialize() -> void:
 	await _run()
 	if session != null:
 		session.leave()
-	if server_pid > 0:
-		OS.kill(server_pid)
-	_remove_temp_dir()
+	if server != null:
+		server.stop()
 	print("NET SMOKE %s (%d failures)" % ["OK" if failures == 0 else "FAILED", failures])
 	quit(1 if failures > 0 else 0)
 
 
 func _run() -> void:
-	var repo := ProjectSettings.globalize_path("res://").path_join("..").simplify_path()
-	var exe := repo.path_join("target/debug/openrail-server")
-	if OS.get_name() == "Windows":
-		exe += ".exe"
-	if not FileAccess.file_exists(exe):
-		print("  building openrail-server with cargo...")
-		OS.execute("cargo", ["build", "-p", "openrail-server", "--manifest-path",
-				repo.path_join("Cargo.toml")])
-	if not _check(FileAccess.file_exists(exe), "server binary exists at %s" % exe):
+	server = TestServer.new()
+	if not _check(await server.start(self, PASSWORD), "server started (%s)" % server.error):
 		return
-
-	var port := _free_port()
-	if not _check(port > 0, "found a free port"):
-		return
-	temp_dir = OS.get_user_data_dir().path_join("smoke_net_%d" % OS.get_process_id())
-	DirAccess.make_dir_recursive_absolute(temp_dir)
-	var cfg_path := temp_dir.path_join("server.toml")
-	var cfg := FileAccess.open(cfg_path, FileAccess.WRITE)
-	cfg.store_string("\n".join([
-		'bind = "127.0.0.1:%d"' % port,
-		'game_bind = "127.0.0.1:%d"' % port,
-		"seed = 3",
-		'save_path = "%s"' % temp_dir.path_join("world.bin"),
-		'cert_path = "%s"' % temp_dir.path_join("cert.der"),
-		'key_path = "%s"' % temp_dir.path_join("key.der"),
-		'password = "%s"' % PASSWORD,
-		"autosave_ticks = 100000",
-		"hash_interval_ticks = 10",
-	]) + "\n")
-	cfg.close()
-	server_pid = OS.create_process(exe, ["--config", cfg_path])
-	if not _check(server_pid > 0, "server started (pid %d, port %d)" % [server_pid, port]):
-		return
-
-	# The key is written after the certificate, so once it exists the
-	# certificate is complete. Then wait for the server to hold the port.
-	var cert := temp_dir.path_join("cert.der")
-	if not await _wait(func() -> bool: return FileAccess.file_exists(temp_dir.path_join("key.der"))):
-		_check(false, "server wrote its certificate")
-		return
-	if not await _wait(func() -> bool: return not _udp_port_free(port)):
-		_check(false, "server bound its UDP port")
-		return
-	var fingerprint := _sha256_hex(FileAccess.get_file_as_bytes(cert))
+	var port := server.port
+	var fingerprint := server.fingerprint
 
 	# Join with the certificate pinned.
 	session = RemoteSession.new()
@@ -187,39 +146,6 @@ func _wait(cond: Callable) -> bool:
 			return true
 		await process_frame
 	return false
-
-
-func _free_port() -> int:
-	for i in 50:
-		var port := randi_range(20000, 60000)
-		var tcp := TCPServer.new()
-		var ok := tcp.listen(port, "127.0.0.1") == OK
-		tcp.stop()
-		if ok and _udp_port_free(port):
-			return port
-	return -1
-
-
-func _udp_port_free(port: int) -> bool:
-	var udp := PacketPeerUDP.new()
-	var ok := udp.bind(port, "127.0.0.1") == OK
-	udp.close()
-	return ok
-
-
-func _sha256_hex(bytes: PackedByteArray) -> String:
-	var ctx := HashingContext.new()
-	ctx.start(HashingContext.HASH_SHA256)
-	ctx.update(bytes)
-	return ctx.finish().hex_encode()
-
-
-func _remove_temp_dir() -> void:
-	if temp_dir == "" or not DirAccess.dir_exists_absolute(temp_dir):
-		return
-	for f in DirAccess.get_files_at(temp_dir):
-		DirAccess.remove_absolute(temp_dir.path_join(f))
-	DirAccess.remove_absolute(temp_dir)
 
 
 func _check(ok: bool, what: String) -> bool:
