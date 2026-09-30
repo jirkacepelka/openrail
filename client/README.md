@@ -36,3 +36,13 @@ stops.
   and overlay, `gameplay_root.gd` (the single entry point `main.gd` instances).
 - `ui/`: toolbar, train/line panel, node tooltip. Built in code, no scenes.
 - `main.gd` redraws the network when `gameplay.network_changed` fires.
+
+## Smoke test
+
+A headless test drives the build tools through a whole line (track, stations, train, route) and checks the train reaches the far station. CI runs it on every push:
+
+```
+cargo build -p openrail-gdext
+godot --headless --import --path client
+godot --headless --path client --script res://tests/smoke_build.gd
+```
