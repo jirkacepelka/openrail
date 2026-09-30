@@ -10,3 +10,10 @@ server.toml
 .DS_Store
 client/bin/
 client/build/
+
+# Blender
+*.blend1
+*.blend2
+art-src/source/baked/
+art-src/export/
+__pycache__/
