@@ -9,6 +9,7 @@ rust-version.workspace = true
 
 [dependencies]
 openrail-sim.workspace = true
+openrail-net.workspace = true
 serde.workspace = true
 tokio.workspace = true
 axum.workspace = true
