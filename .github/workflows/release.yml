@@ -1,12 +1,18 @@
 name: Release
 
 # Tag v* : build Windows and Linux, publish a GitHub pre-release.
-# Manual run: build both and keep them as workflow artifacts (no release).
+# Manual run: build both and keep them as workflow artifacts; with "publish"
+# ticked, also tag the commit v<Cargo version> and publish the pre-release.
 # Pull request touching the client or packaging: check the Windows export only.
 on:
   push:
     tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      publish:
+        description: "Tag v<Cargo version> on this commit and publish a pre-release"
+        type: boolean
+        default: false
   pull_request:
     paths:
       - "client/**"
@@ -135,12 +141,22 @@ jobs:
           retention-days: 14
 
   release:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.publish)
     needs: [windows, linux]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
+      - name: Pick the tag
+        id: tag
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "name=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+          else
+            version="$(sed -n '/^\[workspace.package\]/,/^\[/s/^version = "\(.*\)"/\1/p' Cargo.toml)"
+            echo "name=v$version" >> "$GITHUB_OUTPUT"
+          fi
       - uses: actions/download-artifact@v4
         with:
           path: dist
@@ -148,6 +164,8 @@ jobs:
       - run: ls -la dist
       - uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.tag.outputs.name }}
+          target_commitish: ${{ github.sha }}
           prerelease: true
           generate_release_notes: true
           fail_on_unmatched_files: true
