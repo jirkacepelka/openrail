@@ -12,9 +12,12 @@ Camera (`gameplay/rts_camera.gd`)
 | --- | --- |
 | WASD / arrow keys | Pan (Shift = faster) |
 | Mouse to window edge | Pan |
-| Mouse wheel | Zoom |
+| Mouse wheel | Zoom (50 m to 8 km) |
 | Middle mouse drag | Rotate and tilt |
 | Q / E | Rotate |
+
+The game starts looking at the first town from about 560 m. The camera rides
+on the terrain and never dips below the hills.
 
 Game speed (top bar, `ui/hud.gd`)
 
@@ -69,7 +72,7 @@ tools and tests (it starts a throw-away local game if no session exists).
 
 ## Layout
 
-- `gameplay/`: camera, ground plane pick (`ground_pick.gd`), build controller
+- `gameplay/`: camera, terrain pick (`ground_pick.gd`), build controller
   and overlay, `gameplay_root.gd` (the single entry point `game/game.gd` instances) and
   `command_sink.gd` (where the tools send commands, local or online).
 - `net/`: `remote_session.gd` (one visit to a server) and `remote_sink.gd`.
@@ -77,6 +80,10 @@ tools and tests (it starts a throw-away local game if no session exists).
 - `game/`: session autoload, world generation, settings, strings, the game
   scene (`game.gd`, redraws the network when `gameplay.network_changed`
   fires) and `world_labels.gd` (town, station and train markers and labels).
+- `world/`: scenery from the sim state: terrain (`terrain.gd`, heights from
+  `SimWorld.terrain_height` through `ground.gd`), track meshes
+  (`track_mesh.gd`) and towns. See `world/README.md`, including the terrain
+  vertex data for shaders.
 - `ui/` also has the theme (`ui_theme.gd`), main menu, HUD bar and toast.
 
 ## Building and smoke test
@@ -109,7 +116,8 @@ failure.
 | --- | --- | --- |
 | `tests/smoke_build.gd` | Build tools through a whole line; the train reaches the far station. | `SMOKE OK` |
 | `tests/game_loop.gd` | A local game from `Session` with a fixed seed: towns, money, speed control, a line between two towns carries passengers, settings persist. | `GAME LOOP OK` |
-| `tests/smoke_net.gd` | `RemoteSession` against a local server: pinned join, the build tools through the remote sink, the train moves, the view is read-only. | `NET SMOKE OK` |
+| `tests/terrain.gd` | Terrain heights are deterministic and match the terrain and track meshes, picking hits hills, towns sit on flat dry ground, the game starts at the first town above the ground. | `TERRAIN OK` |
+| `tests/smoke_net.gd` | `RemoteSession` against a local server: pinned join, the build tools through the remote sink, the train moves, the view is read-only, its terrain matches a local world with the server's seed. | `NET SMOKE OK` |
 | `tests/online_game.gd` | The real UI path: main menu join dialog, game scene on the remote world, building until the train moves, leaving to the menu, and a server shutdown returning to the menu with the reason. | `ONLINE GAME OK` |
 
 ```

@@ -62,6 +62,8 @@ jobs:
         run: ./godot --headless --path client --script res://tests/game_loop.gd
       - name: Towns test
         run: ./godot --headless --path client --script res://tests/towns.gd
+      - name: Terrain test
+        run: ./godot --headless --path client --script res://tests/terrain.gd
       - name: Online smoke test
         run: ./godot --headless --path client --script res://tests/smoke_net.gd
       - name: Online game test (menu, join, build, leave)

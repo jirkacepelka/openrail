@@ -5,7 +5,7 @@ extends SceneTree
 ##   xvfb-run -a -s "-screen 0 1920x1080x24" godot --path client \
 ##       --script res://tools/terrain_shots.gd -- --out-dir /tmp/shots
 ##
-## Saves start.png, line_close.png and overview.png into --out-dir.
+## Saves start.png, line_close.png, overview.png and hills.png into --out-dir.
 
 const Tools := preload("res://gameplay/tools.gd")
 const Ground := preload("res://world/ground.gd")
@@ -71,7 +71,7 @@ func _run() -> void:
 	_save("overview.png")
 
 	# The highest hill near the start, from a low angle.
-	var n := 64
+	var n := 48
 	var step := 250.0
 	var h := sim.terrain_heights(a.x - n * step * 0.5, a.y - n * step * 0.5, step, n, n)
 	var best := 0
@@ -79,7 +79,9 @@ func _run() -> void:
 		if h[i] > h[best]:
 			best = i
 	var hill := Vector2(a.x - n * step * 0.5 + (best % n) * step, a.y - n * step * 0.5 + (best / n) * step)
-	camera.call("jump_to", Vector3(hill.x, 0.0, hill.y), 2.2, 0.3, 2500.0)
+	# Look from the town's side towards the hill, low over the ground.
+	var to_hill := (hill - a).normalized()
+	camera.call("jump_to", Vector3(hill.x, 0.0, hill.y), atan2(-to_hill.x, -to_hill.y), 0.27, 3000.0)
 	await _settle(terrain, 40)
 	_save("hills.png")
 	quit(0)
