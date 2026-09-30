@@ -149,5 +149,10 @@ the screenshot above was made.
 The post-process costs one Kuwahara pass (`(2r+1)²` samples, 25 at the
 default radius 2) plus 10 depth/normal taps per pixel, which is fine on
 desktop GPUs at 1080p. On low-end hardware set `kuwahara_radius` to 0 or
-set `post_process = false` on ArtStyle. It needs the Forward+ renderer
-(normal-roughness buffer).
+set `post_process = false` on ArtStyle.
+
+The full post-process needs the Forward+ renderer (normal-roughness buffer).
+On the Mobile and Compatibility (OpenGL) renderers, used on older GPUs,
+ArtStyle switches to `post_painterly_lite.gdshader`: the same colour grade and
+vignette, without the paint filter and ink lines. The object, ground and sky
+shaders work on all three renderers.
