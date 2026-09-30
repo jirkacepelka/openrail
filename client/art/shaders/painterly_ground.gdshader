@@ -24,11 +24,15 @@ group_uniforms slopes;
 uniform vec4 color_dirt : source_color = vec4(0.58, 0.45, 0.32, 1.0);
 uniform vec4 color_rock : source_color = vec4(0.56, 0.55, 0.56, 1.0);
 // Slope (1 - normal.y) where dirt and then bare rock take over.
-uniform float dirt_slope = 0.18;
-uniform float rock_slope = 0.38;
+uniform float dirt_slope = 0.12;
+uniform float rock_slope = 0.3;
 // Heights (metres) where the grass turns drier and rockier.
-uniform float highland_start = 250.0;
-uniform float highland_end = 700.0;
+uniform float highland_start = 90.0;
+uniform float highland_end = 240.0;
+// Tilts normals away from the vertical so gentle hills catch light and
+// shade like a painter would exaggerate them (1 = physically right).
+uniform float relief = 3.5;
+uniform vec4 color_slope_shade : source_color = vec4(0.26, 0.42, 0.28, 1.0);
 
 group_uniforms fields;
 uniform vec4 color_wheat : source_color = vec4(0.78, 0.62, 0.30, 1.0);
@@ -155,7 +159,9 @@ void fragment() {
 	vec3 canopy = mix(color_forest_floor.rgb, color_forest_floor.rgb * vec3(1.35, 1.3, 1.1), smoothstep(0.45, 0.65, crowns));
 	base = mix(base, canopy, smoothstep(0.15, 0.6, m.r));
 
-	// 3. Slopes: dirt, then rock, with a ragged boundary.
+	// 3. Slopes: deeper, cooler grass as it steepens, then dirt, then rock,
+	// with a ragged boundary.
+	base = mix(base, color_slope_shade.rgb, smoothstep(0.02, dirt_slope, slope) * 0.55 * (1.0 - farm));
 	float ragged = (or_fbm_soft(xz / 40.0, fw / 40.0, 3) - 0.5) * 0.12;
 	float dirt = smoothstep(dirt_slope - 0.05, dirt_slope + 0.05, slope + ragged);
 	float rock = smoothstep(rock_slope - 0.06, rock_slope + 0.06, slope + ragged + highland * 0.12);
@@ -171,6 +177,8 @@ void fragment() {
 		brush = mix(brush, fine, 0.55 * near);
 	}
 	ALBEDO = or_paint_albedo(base, brush, value_jitter, hue_jitter);
+	vec3 relief_n = normalize(vec3(world_normal.x * relief, world_normal.y, world_normal.z * relief));
+	NORMAL = normalize((VIEW_MATRIX * vec4(relief_n, 0.0)).xyz);
 	ROUGHNESS = 1.0;
 	METALLIC = 0.0;
 }

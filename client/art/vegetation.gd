@@ -28,11 +28,11 @@ const CONIFER_GREENS := [Color(0.20, 0.36, 0.27), Color(0.24, 0.40, 0.26), Color
 @export var mask_size := 256
 @export var chunk_size := 1000.0
 ## Trees in one mask pixel of full forest.
-@export var trees_per_forest_pixel := 22
-## Chance of a lone tree in a pixel of open meadow.
-@export var meadow_tree_chance := 0.35
+@export var trees_per_forest_pixel := 24
+## Lone trees per mask pixel of open meadow (fractions are a chance).
+@export var meadow_tree_chance := 1.2
 ## Beyond this distance from the camera trees are drawn as simple blobs.
-@export var lod_distance := 3000.0
+@export var lod_distance := 2200.0
 ## Tree chunks further than this are hidden (the forest floor painted on the
 ## ground carries the woods further out).
 @export var visibility_end := 12000.0
@@ -47,6 +47,8 @@ var mask_rect: Vector4
 
 var _sim: Object
 var _ground_script: Script
+var _water_level := -INF
+var _heights := PackedFloat32Array() # mask_size², at mask pixel centres
 var _meshes := {} # kind -> Mesh
 var _chunks := {} # Vector2i -> {kind -> {"xforms": Array[Transform3D], "node": MultiMeshInstance3D}}
 var _cleared_segments := 0
@@ -65,10 +67,14 @@ func build(sim: Object, seed_value: int, material_converter: Callable) -> void:
 		for m in script.get_script_method_list():
 			if m["name"] == "height_at":
 				_ground_script = script
-				break
+		for m in script.get_script_method_list():
+			if m["name"] == "water_level" and _ground_script != null:
+				_water_level = _ground_script.call("water_level", _sim)
 	var started := Time.get_ticks_msec()
 	var towns := _towns()
+	print_verbose("Vegetation: towns %d ms" % (Time.get_ticks_msec() - started))
 	var mask := _build_mask(seed_value, towns)
+	print_verbose("Vegetation: mask %d ms" % (Time.get_ticks_msec() - started))
 	mask_texture = ImageTexture.create_from_image(mask)
 	mask_rect = Vector4(-extent * 0.5, -extent * 0.5, extent, extent)
 	mask_ready.emit(mask_texture, mask_rect)
@@ -77,11 +83,17 @@ func build(sim: Object, seed_value: int, material_converter: Callable) -> void:
 	_meshes["deciduous_far"] = _far_mesh(false)
 	_meshes["conifer_far"] = _far_mesh(true)
 	_scatter(mask, seed_value)
+	print_verbose("Vegetation: scatter %d ms" % (Time.get_ticks_msec() - started))
 	_hedgerows(towns, seed_value)
+	print_verbose("Vegetation: hedges %d ms" % (Time.get_ticks_msec() - started))
 	_clear_tracks()
 	for key in _chunks:
 		_rebuild_chunk(key)
-	print_verbose("Vegetation: %d chunks in %d ms" % [_chunks.size(), Time.get_ticks_msec() - started])
+	var trees := 0
+	for chunk in _chunks.values():
+		for entry in chunk.values():
+			trees += entry["xforms"].size()
+	print_verbose("Vegetation: %d trees in %d chunks, %d ms" % [trees, _chunks.size(), Time.get_ticks_msec() - started])
 
 
 func _process(delta: float) -> void:
@@ -128,11 +140,16 @@ func _build_mask(seed_value: int, towns: Array) -> Image:
 	farm_noise.fractal_octaves = 3
 	var img := Image.create(mask_size, mask_size, false, Image.FORMAT_RGB8)
 	var px := extent / mask_size
+	_heights.resize(mask_size * mask_size)
 	for y in mask_size:
 		for x in mask_size:
 			var wx := -extent * 0.5 + (x + 0.5) * px
 			var wz := -extent * 0.5 + (y + 0.5) * px
-			var forest := smoothstep(0.18, 0.36, forest_noise.get_noise_2d(wx, wz))
+			# Woods are commoner up in the hills, where nobody farms.
+			var h := _height(wx, wz)
+			_heights[y * mask_size + x] = h
+			var hill := clampf((h - _water_level) / 160.0, 0.0, 1.0) if _water_level > -INF else 0.0
+			var forest := smoothstep(0.1, 0.28, forest_noise.get_noise_2d(wx, wz) + hill * 0.22)
 			var farm := smoothstep(0.25, 0.4, farm_noise.get_noise_2d(wx, wz)) * 0.8
 			var keep_clear := 0.0
 			for t in towns:
@@ -195,9 +212,13 @@ func _near_road(p: Vector2, roads: Array) -> bool:
 
 
 func _plant(kind: String, p: Vector2, rng: RandomNumberGenerator) -> void:
+	var h := _grid_height(p.x, p.y)
+	if h < _water_level + 1.0:
+		return # rivers and lakes
 	var s := rng.randf_range(1.0, 1.6)
 	var basis := Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(s, s * rng.randf_range(0.9, 1.15), s))
-	var xf := Transform3D(basis, Vector3(p.x, _height(p.x, p.y) - 0.3, p.y))
+	# Sunk a little: the grid height can be off by a bit on slopes.
+	var xf := Transform3D(basis, Vector3(p.x, h - 1.0, p.y))
 	var key := Vector2i(floori(p.x / chunk_size), floori(p.y / chunk_size))
 	var chunk: Dictionary = _chunks.get_or_add(key, {})
 	var entry: Dictionary = chunk.get_or_add(kind, {"xforms": []})
@@ -216,8 +237,9 @@ func _scatter(mask: Image, seed_value: int) -> void:
 				continue # a town or its fields
 			if c.r > 0.05:
 				count = int(round(c.r * trees_per_forest_pixel))
-			elif c.g < 0.3 and rng.randf() < meadow_tree_chance:
-				count = 1
+			elif c.g < 0.3:
+				# Lone trees and small copses in the meadows.
+				count = int(meadow_tree_chance) + (1 if rng.randf() < fmod(meadow_tree_chance, 1.0) else 0)
 			if count == 0:
 				continue
 			# Mostly conifers in dense woods, broadleaf at the edges and in meadows.
@@ -226,6 +248,24 @@ func _scatter(mask: Image, seed_value: int) -> void:
 				var wx := -extent * 0.5 + (x + rng.randf()) * px
 				var wz := -extent * 0.5 + (y + rng.randf()) * px
 				_plant("conifer" if rng.randf() < conifer_share else "deciduous", Vector2(wx, wz), rng)
+
+
+## Ground height from the grid sampled with the mask, bilinear. Much
+## cheaper than asking the terrain for every one of the trees.
+func _grid_height(x: float, z: float) -> float:
+	if _heights.is_empty():
+		return _height(x, z)
+	var px := extent / mask_size
+	var gx := clampf((x + extent * 0.5) / px - 0.5, 0.0, mask_size - 1.001)
+	var gz := clampf((z + extent * 0.5) / px - 0.5, 0.0, mask_size - 1.001)
+	var ix := int(gx)
+	var iz := int(gz)
+	var fx := gx - ix
+	var fz := gz - iz
+	var i := iz * mask_size + ix
+	var top := lerpf(_heights[i], _heights[i + 1], fx)
+	var bottom := lerpf(_heights[i + mask_size], _heights[i + mask_size + 1], fx)
+	return lerpf(top, bottom, fz)
 
 
 func _height(x: float, z: float) -> float:
@@ -411,15 +451,15 @@ func _far_mesh(conifer: bool) -> Mesh:
 		cone.top_radius = 0.0
 		cone.bottom_radius = 3.0
 		cone.height = 11.0
-		cone.radial_segments = 5
+		cone.radial_segments = 4
 		cone.rings = 0
 		_add_surface(mesh, [[cone, Transform3D(Basis(), Vector3(0, 7.0, 0))]], _canopy_material(CONIFER_GREENS))
 	else:
 		var blob := SphereMesh.new()
 		blob.radius = 4.0
 		blob.height = 6.5
-		blob.radial_segments = 6
-		blob.rings = 2
+		blob.radial_segments = 5
+		blob.rings = 1
 		_add_surface(mesh, [[blob, Transform3D(Basis(), Vector3(0, 7.0, 0))]], _canopy_material(BROADLEAF_GREENS))
 	return mesh
 
