@@ -50,35 +50,34 @@ quit). The autoload `Session` (`game/session.gd`) owns the current `SimWorld`:
   towns from the seed, empty land, 2,000,000 money) and loads
   `game/game.tscn`. In local mode Session steps the sim at 10 ticks per
   second times the speed (0 pause, 1, 2, 4).
-- `Session.join_server(...)` loads `res://net/remote_session.gd` if it exists
-  (`join(...)`, `poll(delta)`, `world`, `leave()`, signals `status_changed`,
-  `joined`, `failed`); otherwise it emits `join_failed` ("Online zatím není
-  hotové"). Once joined, Session calls the remote's `poll(delta)` instead of
-  stepping and reads its `world`.
-- `Session.leave_to_menu()` drops the world and goes back to the menu.
+- `Session.join_server(address, port, password, name, fingerprint)` creates a
+  `RemoteSession` (`net/remote_session.gd`) as `Session.remote`; the join
+  dialog shows its status and `join_failed` reasons. Once joined, Session
+  polls it every frame instead of stepping, and the game scene shows
+  `remote.world` (a read-only `SimWorld` view) with the build tools sending
+  commands through `remote.sink`. If the server drops the game, Session
+  returns to the menu, which shows the reason (`disconnect_reason`).
+- `Session.leave_to_menu()` leaves the server (if online), drops the world
+  and goes back to the menu.
 
 Money is shown as `2 000 000 $`. Settings (window mode, volume, language)
 persist to `user://settings.cfg` (`game/settings.gd`). All menu/HUD strings
-are in `game/loc.gd` (Czech default, English included); add a dictionary there
+and build tool strings are in `game/loc.gd` (Czech default, English
+included; `Loc.error` translates simulation error texts); add a dictionary there
 to translate. `res://main.tscn` is a thin wrapper around `game/game.tscn` for
 tools and tests (it starts a throw-away local game if no session exists).
 
 ## Layout
 
 - `gameplay/`: camera, ground plane pick (`ground_pick.gd`), build controller
-  and overlay, `gameplay_root.gd` (the single entry point `main.gd` instances).
+  and overlay, `gameplay_root.gd` (the single entry point `game/game.gd` instances) and
+  `command_sink.gd` (where the tools send commands, local or online).
+- `net/`: `remote_session.gd` (one visit to a server) and `remote_sink.gd`.
 - `ui/`: toolbar, train/line panel, node tooltip. Built in code, no scenes.
 - `game/`: session autoload, world generation, settings, strings, the game
   scene (`game.gd`, redraws the network when `gameplay.network_changed`
   fires) and `world_labels.gd` (town, station and train markers and labels).
 - `ui/` also has the theme (`ui_theme.gd`), main menu, HUD bar and toast.
-
-## Tests
-
-`tests/game_loop.gd` starts a game from `Session` with a fixed seed, builds a
-line between two towns with the build tools, runs the sim and checks towns,
-money and carried passengers (`godot --headless --path client --script
-res://tests/game_loop.gd`, prints `GAME LOOP OK`).
 
 ## Building and smoke test
 
@@ -99,3 +98,24 @@ A headless test drives the build tools through a whole line (track, stations, tr
 godot --headless --import --path client
 godot --headless --path client --script res://tests/smoke_build.gd
 ```
+
+## Tests
+
+All run headless from the repository root after the build steps above, and
+CI runs them on every push. Each prints its OK line and exits non-zero on
+failure.
+
+| Test | Checks | Prints |
+| --- | --- | --- |
+| `tests/smoke_build.gd` | Build tools through a whole line; the train reaches the far station. | `SMOKE OK` |
+| `tests/game_loop.gd` | A local game from `Session` with a fixed seed: towns, money, speed control, a line between two towns carries passengers, settings persist. | `GAME LOOP OK` |
+| `tests/smoke_net.gd` | `RemoteSession` against a local server: pinned join, the build tools through the remote sink, the train moves, the view is read-only. | `NET SMOKE OK` |
+| `tests/online_game.gd` | The real UI path: main menu join dialog, game scene on the remote world, building until the train moves, leaving to the menu, and a server shutdown returning to the menu with the reason. | `ONLINE GAME OK` |
+
+```
+godot --headless --path client --script res://tests/game_loop.gd
+```
+
+The two online tests start `target/debug/openrail-server` on a free local
+port (`tests/test_server.gd`; built with cargo if missing, so run
+`cargo build -p openrail-server` first to keep them fast).
