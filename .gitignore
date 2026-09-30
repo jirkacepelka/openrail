@@ -8,3 +8,10 @@ server.toml
 .vscode/
 *.swp
 .DS_Store
+
+# Blender
+*.blend1
+*.blend2
+art-src/source/baked/
+art-src/export/
+__pycache__/
