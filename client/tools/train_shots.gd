@@ -31,6 +31,8 @@ var _last := Vector2.INF
 var _focus := Vector3.ZERO
 var _dir := Vector3.FORWARD
 var _ticks := 0
+var _next_phase := ""
+var _last_gap := INF
 
 
 func _initialize() -> void:
@@ -116,7 +118,7 @@ func _build() -> void:
 	print("train_shots: towns %d and %d, bend at %s, train %d" % [a, b, _bend, _train])
 
 
-func _process(delta: float) -> bool:
+func _process(_delta: float) -> bool:
 	if _sim == null:
 		return false
 	if _train < 0:
@@ -124,21 +126,26 @@ func _process(delta: float) -> bool:
 		return false
 	match _phase:
 		"run_to_bend":
-			_advance(2)
 			var cars: Array = _trains.call("cars_of", _train)
+			var gap := INF
 			if not cars.is_empty():
 				var mid := cars[cars.size() / 2] as Node3D
-				if Vector2(mid.position.x, mid.position.z).distance_to(_bend) < 6.0:
+				gap = Vector2(mid.position.x, mid.position.z).distance_to(_bend)
+				# Closest to the bend: the middle of the train is on it.
+				if gap < 30.0 and gap > _last_gap:
 					_start_shots("bend", mid)
+					return false
+			_last_gap = gap
+			_advance(1 if gap < 80.0 else (4 if gap < 400.0 else 30))
 			if _ticks > 40000:
 				push_error("train never reached the bend")
 				return true
 		"run_to_station":
-			_advance(4)
 			var p := Vector2.INF
 			for t in _sim.trains():
 				if t["id"] == _train:
 					p = Vector2(t["x"], t["y"])
+			_advance(4 if p.distance_to(_far_station) < 400.0 else 30)
 			_still = _still + 1 if p == _last else 0
 			_last = p
 			if p.distance_to(_far_station) < 1.0 and _still > 30:
@@ -146,12 +153,7 @@ func _process(delta: float) -> bool:
 				_start_shots("station", cars[cars.size() / 2] as Node3D)
 		"shoot":
 			_shoot()
-			if _shots.is_empty():
-				if _phase == "done_bend":
-					pass
 			return _phase == "done"
-		"done_bend":
-			_phase = "run_to_station"
 	return false
 
 
@@ -162,9 +164,6 @@ func _advance(ticks: int) -> void:
 	var at: Variant = _trains.call("train_position", _train)
 	if at is Vector3:
 		_cam.look_at_from_position((at as Vector3) + Vector3(60, 45, 60), at)
-
-
-var _next_phase := ""
 
 
 func _start_shots(kind: String, car: Node3D) -> void:
