@@ -1,15 +1,22 @@
 extends Node3D
-## Markers and floating labels for towns, stations and trains. Simple meshes
-## and Label3D nodes; refreshed a few times per second from the sim getters.
+## Towns, plus markers and floating labels for towns, stations and trains.
+## Towns are drawn by `world/towns.gd` (streets, buildings, fields) with a
+## name and population label over the centre; stations and trains are simple
+## meshes. Refreshed a few times per second from the sim getters.
 ## Sim (x, y) maps to Godot (x, z).
 
 const Loc := preload("res://game/loc.gd")
+const Towns := preload("res://world/towns.gd")
+const Ground := preload("res://world/ground.gd")
+
+const TOWN_LABEL_HEIGHT := 75.0 ## Above the ground at the town centre (m).
 
 const REFRESH_SECONDS := 0.25
 
 var sim: SimWorld
 
-var _towns: Array[Dictionary] = [] ## {marker, label}
+var towns: Towns
+var _town_labels: Array[Label3D] = []
 var _stations := {} ## node id -> {marker, label}
 var _trains := {} ## train id -> {box, label}
 var _capacity := 100
@@ -18,6 +25,11 @@ var _timer := 0.0
 
 func setup(p_sim: SimWorld) -> void:
 	sim = p_sim
+	if towns == null:
+		towns = Towns.new()
+		towns.name = "Towns"
+		add_child(towns)
+	towns.setup(sim)
 	_capacity = sim.train_capacity()
 	refresh()
 
@@ -61,27 +73,26 @@ static func _make_marker(mesh: Mesh, color: Color) -> MeshInstance3D:
 
 
 func _refresh_towns() -> void:
+	towns.sync()
 	var pos := sim.town_positions()
 	var names := sim.town_names()
 	var pops := sim.town_populations()
-	while _towns.size() < pos.size():
-		var marker := _make_marker(CylinderMesh.new(), Color(0.86, 0.80, 0.68))
-		add_child(marker)
-		var label := _make_label(40, Color(1, 1, 1))
+	while _town_labels.size() < pos.size():
+		var label := _make_label(44, Color(1, 0.97, 0.9))
+		label.outline_size = 14
+		# Drawn after transparent full-screen passes (the art style's
+		# post-process quad), which would otherwise paint over it.
+		label.render_priority = 127
+		label.outline_render_priority = 126
 		add_child(label)
-		_towns.append({"marker": marker, "label": label})
+		_town_labels.append(label)
+	while _town_labels.size() > pos.size():
+		_town_labels.pop_back().queue_free()
 	for i in pos.size():
-		var t := _towns[i]
-		var pop: int = pops[i]
-		var radius := 60.0 + sqrt(float(pop)) * 3.5 # about 200 to 300 m
-		var cyl := (t["marker"] as MeshInstance3D).mesh as CylinderMesh
-		cyl.top_radius = radius
-		cyl.bottom_radius = radius
-		cyl.height = 6.0
-		(t["marker"] as MeshInstance3D).position = Vector3(pos[i].x, 3.0, pos[i].y)
-		var label: Label3D = t["label"]
-		label.text = Loc.t("town.label", [names[i], Loc.number(pop)])
-		label.position = Vector3(pos[i].x, 90.0, pos[i].y)
+		var label := _town_labels[i]
+		label.text = Loc.t("town.label", [names[i], Loc.number(pops[i])])
+		var ground := Ground.height_at(sim, pos[i].x, pos[i].y)
+		label.position = Vector3(pos[i].x, ground + TOWN_LABEL_HEIGHT, pos[i].y)
 
 
 func _refresh_stations() -> void:
