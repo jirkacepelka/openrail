@@ -10,6 +10,7 @@ const GroundPick := preload("res://gameplay/ground_pick.gd")
 const RtsCamera := preload("res://gameplay/rts_camera.gd")
 const BuildOverlay := preload("res://gameplay/build_overlay.gd")
 const CommandSink := preload("res://gameplay/command_sink.gd")
+const Loc := preload("res://game/loc.gd")
 
 ## Emitted after nodes or tracks changed (rebuild the network rendering).
 signal network_changed
@@ -20,6 +21,9 @@ signal hint_changed(text: String)
 ## Route draft (selected train / chosen stops) changed.
 signal draft_changed
 signal hover_changed(node_id: int)
+## A build command was rejected (`error` may be empty). "not enough money"
+## is the error text for missing funds, locally and online.
+signal command_failed(error: String)
 
 const MIN_TRACK_LENGTH := 20.0 ## Metres.
 const COLOR_NODE := Color(0.85, 0.85, 0.85, 0.9)
@@ -117,7 +121,7 @@ func can_confirm_route() -> bool:
 
 func confirm_route() -> void:
 	if not can_confirm_route():
-		_set_hint("A route needs a train and at least two stations.")
+		_set_hint(Loc.t("hint.route_incomplete"))
 		return
 	var stops := PackedInt64Array()
 	for s in route_stops:
@@ -126,14 +130,14 @@ func confirm_route() -> void:
 	_set_waiting_hint()
 	sink.set_route(id, stops, func(ok: bool, _unused: int, err: String) -> void:
 		if not ok:
-			_set_hint("The route was rejected%s." % _reason(err))
+			_fail(Loc.t("hint.route_rejected", [_reason(err)]), err)
 			return
 		if selected_train == id:
 			selected_train = -1
 			route_stops.clear()
 			draft_changed.emit()
 		trains_changed.emit()
-		_set_hint("Route set for train %d. Select another train or press Esc." % id)
+		_set_hint(Loc.t("hint.route_set", [id]))
 	)
 
 
@@ -172,7 +176,7 @@ func cancel() -> void:
 
 
 func station_label(node_id: int) -> String:
-	return "Station %d" % node_id
+	return Loc.t("node.station", [node_id])
 
 
 func describe_node(node_id: int) -> String:
@@ -189,16 +193,16 @@ func describe_node(node_id: int) -> String:
 		if a == node_id or b == node_id:
 			links += 1
 	var lines := PackedStringArray()
-	lines.append(station_label(node_id) if is_station else "Junction %d" % node_id)
-	lines.append("Position: %d, %d m" % [roundi(x), roundi(y)])
-	lines.append("Tracks: %d" % links)
+	lines.append(station_label(node_id) if is_station else Loc.t("node.junction", [node_id]))
+	lines.append(Loc.t("node.position", [roundi(x), roundi(y)]))
+	lines.append(Loc.t("node.tracks", [links]))
 	if is_station:
 		var served := PackedStringArray()
 		for t in sim.trains():
 			var stops: PackedInt64Array = t["stops"]
 			if stops.has(node_id):
 				served.append(str(t["id"]))
-		lines.append("Trains: %s" % (", ".join(served) if not served.is_empty() else "none"))
+		lines.append(Loc.t("node.trains", [", ".join(served) if not served.is_empty() else Loc.t("node.no_trains")]))
 	return "\n".join(lines)
 
 
@@ -293,8 +297,18 @@ func _click() -> void:
 			_click_route()
 
 
+## The cached node `id`; refreshes the cache once if it is missing (another
+## player may have built it since the last refresh). Empty if unknown.
+func _node(id: int) -> Dictionary:
+	if not _nodes.has(id):
+		refresh_cache()
+	return _nodes.get(id, {})
+
+
 func _node_pos(id: int) -> Vector2:
-	var n: Dictionary = _nodes[id]
+	var n := _node(id)
+	if n.is_empty():
+		return Vector2.ZERO
 	var x: float = n["x"]
 	var y: float = n["y"]
 	return Vector2(x, y)
@@ -323,10 +337,10 @@ func _click_track() -> void:
 	if snapped_id >= 0 and snapped_id == start_id:
 		return
 	if chain_pos.distance_to(pos) < MIN_TRACK_LENGTH:
-		_set_hint("Too short. Tracks need at least %d m." % int(MIN_TRACK_LENGTH))
+		_set_hint(Loc.t("hint.track_short", [int(MIN_TRACK_LENGTH)]))
 		return
 	if snapped_id >= 0 and start_id >= 0 and _track_exists(start_id, snapped_id):
-		_set_hint("There is already a track between those nodes.")
+		_set_hint(Loc.t("hint.track_exists"))
 		return
 	# Online the end points may not exist yet; the sink builds the track
 	# once both are confirmed. Locally all of this happens right here.
@@ -348,7 +362,7 @@ func _on_track_built(ok: bool, _track: int, err: String, end: CommandSink.NodeRe
 	if ok:
 		_set_hint(_default_hint())
 		return
-	_set_hint("Could not build that track%s." % _reason(err))
+	_fail(Loc.t("hint.track_failed", [_reason(err)]), err)
 	if chain_ref == end:
 		chain_active = false
 		chain_node = -1
@@ -363,21 +377,21 @@ func _chain_id() -> int:
 func _click_station() -> void:
 	var id := sim.nearest_node(_ground.x, _ground.y, snap_radius())
 	if id < 0:
-		_set_hint("Click on a track node to make it a station.")
+		_set_hint(Loc.t("hint.station_no_node"))
 		return
-	var n: Dictionary = _nodes[id]
-	var is_station: bool = n["station"]
+	var n := _node(id)
+	var is_station: bool = n.get("station", false)
 	if is_station:
-		_set_hint("Node %d is already a station." % id)
+		_set_hint(Loc.t("hint.station_exists", [id]))
 		return
 	_set_waiting_hint()
 	sink.build_station(id, func(ok: bool, _unused: int, err: String) -> void:
 		if ok:
 			refresh_cache()
-			_set_hint("Station %d built." % id)
+			_set_hint(Loc.t("hint.station_built", [id]))
 			network_changed.emit()
 		else:
-			_set_hint("Could not build a station there%s." % _reason(err))
+			_fail(Loc.t("hint.station_failed", [_reason(err)]), err)
 	)
 
 
@@ -403,19 +417,19 @@ func _nearest_track(p: Vector2, max_dist: float) -> int:
 func _click_train() -> void:
 	var track_id := _nearest_track(_ground, snap_radius())
 	if track_id < 0:
-		_set_hint("Click on a track to place a train.")
+		_set_hint(Loc.t("hint.train_no_track"))
 		return
 	_set_waiting_hint()
 	sink.spawn_train(track_id, func(ok: bool, train_id: int, err: String) -> void:
 		if not ok:
-			_set_hint("Could not place a train%s." % _reason(err) if err != ""
-					else "That track already has a train.")
+			_fail(Loc.t("hint.train_failed", [_reason(err)]) if err != ""
+					else Loc.t("hint.train_track_taken"), err)
 			return
 		trains_changed.emit()
 		if train_id >= 0:
-			_set_hint("Train %d placed. Use the Route tool to send it between stations." % train_id)
+			_set_hint(Loc.t("hint.train_placed", [train_id]))
 		else:
-			_set_hint("Train placed. Use the Route tool to send it between stations.")
+			_set_hint(Loc.t("hint.train_placed_any"))
 	)
 
 
@@ -436,10 +450,10 @@ func _nearest_train(p: Vector2, max_dist: float) -> int:
 func _click_route() -> void:
 	var node_id := sim.nearest_node(_ground.x, _ground.y, snap_radius())
 	if selected_train >= 0 and node_id >= 0:
-		var n: Dictionary = _nodes[node_id]
-		var is_station: bool = n["station"]
+		var n := _node(node_id)
+		var is_station: bool = n.get("station", false)
 		if not is_station:
-			_set_hint("Node %d is not a station. Build one with the Station tool." % node_id)
+			_set_hint(Loc.t("hint.route_not_station", [node_id]))
 			return
 		if not route_stops.is_empty() and route_stops.back() == node_id:
 			return
@@ -474,37 +488,54 @@ func _set_hint(text: String) -> void:
 ## replaces it before anyone sees it.
 func _set_waiting_hint() -> void:
 	if sink.is_remote():
-		_set_hint("Waiting for the server...")
+		_set_hint(Loc.t("hint.waiting"))
+
+
+## Shows `text` as the hint and reports the rejected command.
+func _fail(text: String, err: String) -> void:
+	_set_hint(text)
+	command_failed.emit(err)
 
 
 func _reason(err: String) -> String:
-	return ": " + err if err != "" else ""
+	return ": " + Loc.error(err) if err != "" else ""
 
 
 ## The world changed without our tools (other players online, a resync).
 func _on_world_changed() -> void:
 	refresh_cache()
+	if selected_train >= 0 and not _train_exists(selected_train):
+		# Removed by someone else: drop the route draft.
+		selected_train = -1
+		route_stops.clear()
+		draft_changed.emit()
+		_set_hint(_default_hint())
 	network_changed.emit()
 	trains_changed.emit()
+
+
+func _train_exists(train_id: int) -> bool:
+	for t in sim.trains():
+		if int(t["id"]) == train_id:
+			return true
+	return false
 
 
 func _default_hint() -> String:
 	match current_tool:
 		Tools.Tool.TRACK:
 			if chain_active:
-				return "Click to place the next point. Right click or Esc ends the line."
-			return "Click a point or an existing node to start a track."
+				return Loc.t("hint.track_next")
+			return Loc.t("hint.track_start")
 		Tools.Tool.STATION:
-			return "Click a node to turn it into a station."
+			return Loc.t("hint.station")
 		Tools.Tool.TRAIN:
-			return "Click a track to place a train."
+			return Loc.t("hint.train")
 		Tools.Tool.ROUTE:
 			if selected_train < 0:
-				return "Click a train (or pick one in the list), then choose stations in order."
-			return "Train %d: click stations in order (%d chosen). Enter confirms." % [
-				selected_train, route_stops.size()
-			]
-	return "Pick a tool below. WASD pans, wheel zooms, middle mouse rotates."
+				return Loc.t("hint.route_pick")
+			return Loc.t("hint.route_stops", [selected_train, route_stops.size()])
+	return Loc.t("hint.none")
 
 
 func _marker_radius() -> float:

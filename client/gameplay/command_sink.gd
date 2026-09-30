@@ -10,7 +10,8 @@ extends RefCounted
 ##
 ## Every command takes `done: Callable(ok: bool, id: int, error: String)`.
 ## `id` is the node, track or train the command created, or -1. `error` may
-## be empty for local rejections (SimWorld gives no reason).
+## is the simulation's reason in English (`SimWorld.last_error()` locally,
+## the server's text online; translate it with `Loc.error`), possibly empty.
 
 ## The world changed through something other than this client's own
 ## commands (other players, a resync). Only the remote sink emits it.
@@ -60,27 +61,27 @@ func is_remote() -> bool:
 
 func build_node(x: float, y: float, done: Callable) -> void:
 	var id := world.build_node(x, y)
-	done.call(id >= 0, id, "")
+	done.call(id >= 0, id, _error(id >= 0))
 
 
 func build_track(a: int, b: int, done: Callable) -> void:
 	var id := world.build_track(a, b)
-	done.call(id >= 0, id, "")
+	done.call(id >= 0, id, _error(id >= 0))
 
 
 func build_station(node: int, done: Callable) -> void:
 	var ok := world.build_station(node)
-	done.call(ok, -1, "")
+	done.call(ok, -1, _error(ok))
 
 
 func spawn_train(track: int, done: Callable) -> void:
 	var id := world.spawn_train(track)
-	done.call(id >= 0, id, "")
+	done.call(id >= 0, id, _error(id >= 0))
 
 
 func set_route(train: int, stops: PackedInt64Array, done: Callable) -> void:
 	var ok := world.set_route(train, stops)
-	done.call(ok, -1, "")
+	done.call(ok, -1, _error(ok))
 
 
 func remove_train(train: int, done: Callable) -> void:
@@ -89,7 +90,12 @@ func remove_train(train: int, done: Callable) -> void:
 		done.call(false, -1, "removing trains is not supported here")
 		return
 	var ok: bool = world.call("remove_train", train)
-	done.call(ok, -1, "")
+	done.call(ok, -1, _error(ok))
+
+
+## The local world's reason for the command that just ran ("" if it worked).
+func _error(ok: bool) -> String:
+	return "" if ok else String(world.last_error())
 
 
 ## The existing node `id`, or (with id -1) a new node built at `pos`.
@@ -113,7 +119,7 @@ func build_track_between(a: NodeRef, b: NodeRef, done: Callable) -> void:
 		b.when_ready(func() -> void:
 			if a.id < 0 or b.id < 0:
 				var err := a.error if a.id < 0 else b.error
-				done.call(false, -1, "could not build the node" + (": " + err if err != "" else ""))
+				done.call(false, -1, err) # why the end point could not be built
 				return
 			build_track(a.id, b.id, done)
 		)

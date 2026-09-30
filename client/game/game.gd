@@ -3,6 +3,10 @@ extends Node3D
 ## coordinates (x, y) map to Godot's ground plane (x, z). Stepping the sim is
 ## the Session's job; this scene draws the network, towns, stations and
 ## trains and hosts the build tools and the HUD.
+##
+## Online (`Session.is_remote()`) the world is the read-only view of
+## `Session.remote` and the build tools send their commands through
+## `Session.remote.sink`; the server generated the world and runs the clock.
 
 const GameplayRoot := preload("res://gameplay/gameplay_root.gd")
 const WorldLabels := preload("res://game/world_labels.gd")
@@ -10,14 +14,15 @@ const Hud := preload("res://ui/hud.gd")
 const Toast := preload("res://ui/toast.gd")
 const Loc := preload("res://game/loc.gd")
 
+## The simulation's text for a command it could not afford.
+const FUNDS_ERROR := "not enough money"
+
 var sim: SimWorld
 var track_mesh: MeshInstance3D
 var gameplay: GameplayRoot
 var labels: WorldLabels
 var hud: Hud
 var toast: Toast
-
-var _errors_seen := 0
 
 
 func _ready() -> void:
@@ -32,7 +37,6 @@ func _ready() -> void:
 	if sim == null:
 		push_error("Game scene needs a Session world")
 		return
-	_errors_seen = sim.error_count()
 
 	labels = WorldLabels.new()
 	labels.name = "WorldLabels"
@@ -43,9 +47,13 @@ func _ready() -> void:
 	# Gameplay layer: build tools, line panel and RTS camera input.
 	gameplay = GameplayRoot.new()
 	add_child(gameplay)
-	gameplay.setup(sim, $Camera3D as Camera3D)
+	var sink: RefCounted = null
+	if session.is_remote() and session.remote != null:
+		sink = session.remote.sink
+	gameplay.setup(sim, $Camera3D as Camera3D, sink)
 	gameplay.network_changed.connect(_draw_tracks)
-	gameplay.controller.hint_changed.connect(_on_hint_changed)
+	gameplay.trains_changed.connect(labels.refresh)
+	gameplay.controller.command_failed.connect(_on_command_failed)
 
 	var layer := CanvasLayer.new()
 	layer.name = "HudLayer"
@@ -86,11 +94,8 @@ func _draw_tracks() -> void:
 	track_mesh = inst
 
 
-## A rejected build command shows a toast; running out of money says so.
-func _on_hint_changed(_text: String) -> void:
-	var errors := sim.error_count()
-	if errors == _errors_seen:
-		return
-	_errors_seen = errors
-	if sim.last_error_is_funds():
+## Running out of money shows a toast (other rejections only change the
+## hint). Works the same locally and online.
+func _on_command_failed(error: String) -> void:
+	if error == FUNDS_ERROR:
 		toast.show_message(Loc.t("toast.no_money"))

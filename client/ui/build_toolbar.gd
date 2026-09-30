@@ -5,6 +5,16 @@ extends PanelContainer
 
 const Tools := preload("res://gameplay/tools.gd")
 const BuildController := preload("res://gameplay/build_controller.gd")
+const Loc := preload("res://game/loc.gd")
+
+## Loc key of each tool button.
+const TOOL_KEYS := {
+	Tools.Tool.TRACK: "tool.track",
+	Tools.Tool.STATION: "tool.station",
+	Tools.Tool.TRAIN: "tool.train",
+	Tools.Tool.ROUTE: "tool.route",
+	Tools.Tool.BULLDOZE: "tool.bulldoze",
+}
 
 var controller: BuildController
 
@@ -43,19 +53,19 @@ func _ready() -> void:
 	_add_tool_button(row, Tools.Tool.ROUTE, "4")
 	var bulldoze := _add_tool_button(row, Tools.Tool.BULLDOZE, "")
 	bulldoze.disabled = true
-	bulldoze.tooltip_text = "Bulldoze is not available yet."
+	bulldoze.tooltip_text = Loc.t("tool.bulldoze_na")
 
 	_route_row = HBoxContainer.new()
 	_route_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	_route_row.add_theme_constant_override("separation", 6)
 	box.add_child(_route_row)
 	_undo_button = Button.new()
-	_undo_button.text = "Undo stop"
+	_undo_button.text = Loc.t("tool.undo_stop")
 	_undo_button.focus_mode = Control.FOCUS_NONE
 	_undo_button.pressed.connect(_on_undo_pressed)
 	_route_row.add_child(_undo_button)
 	_confirm_button = Button.new()
-	_confirm_button.text = "Confirm route (Enter)"
+	_confirm_button.text = Loc.t("tool.confirm_route")
 	_confirm_button.focus_mode = Control.FOCUS_NONE
 	_confirm_button.pressed.connect(_on_confirm_pressed)
 	_route_row.add_child(_confirm_button)
@@ -69,7 +79,7 @@ func _ready() -> void:
 
 func _add_tool_button(parent: Control, tool: int, shortcut_hint: String) -> Button:
 	var b := Button.new()
-	var label: String = Tools.NAMES[tool]
+	var label := Loc.t(TOOL_KEYS[tool])
 	b.text = label if shortcut_hint.is_empty() else "%s [%s]" % [label, shortcut_hint]
 	b.toggle_mode = true
 	b.focus_mode = Control.FOCUS_NONE
