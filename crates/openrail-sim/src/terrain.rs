@@ -6,7 +6,7 @@
 //! The landscape is made of layered gradient noise:
 //! - broad plains whose level drifts slowly over tens of kilometres,
 //! - gentle rolling hills everywhere,
-//! - hilly regions (about a third of the land) with ridges up to ~200 m,
+//! - hilly regions (a bit under half of the land) with ridges up to ~220 m,
 //! - a few shallow lakes in the plains,
 //! - one meandering river crossing the map through a wide valley.
 //!
@@ -184,20 +184,22 @@ fn land(seed: u64, x: i64, y: i64) -> i64 {
         h += mul(hilly, 110 * ridge + 45 * mass + 60 * knolls);
     }
     if hilly < ONE {
-        // Shallow lakes, only in the plains.
-        let lake = smoothstep(
-            ONE * 3 / 10,
-            ONE * 6 / 10,
-            fbm(seed, SALT_LAKES, x, y, 4000, 2),
-        );
-        h -= mul(mul(lake, ONE - hilly), m(45));
+        // Shallow lakes, only in the plains: the ground sinks to a few
+        // metres under water in their middle.
+        let lake = smoothstep(ONE / 5, ONE * 2 / 5, fbm(seed, SALT_LAKES, x, y, 4000, 2));
+        let lake_bed = WATER_LEVEL.to_bits() - m(4);
+        h = lerp(h, lake_bed, mul(lake, ONE - hilly));
+    }
+    // Squash the highest peaks instead of cutting them flat at MAX_HEIGHT.
+    let knee = m(180);
+    if h > knee {
+        h = knee + (h - knee) / 2;
     }
     h
 }
 
 fn sample_bits(seed: u64, x: i64, y: i64, with_wetness: bool) -> (i64, i64) {
     let water = WATER_LEVEL.to_bits();
-    let bank = water + m(2);
     let d = river_distance(seed, x, y);
     // The river bed: 4 m under water in the middle, 2 m over it at the bank.
     let bed = water - m(4) + mul(m(6), smoothstep(0, m(RIVER_HALF_WIDTH), d));
@@ -205,7 +207,7 @@ fn sample_bits(seed: u64, x: i64, y: i64, with_wetness: bool) -> (i64, i64) {
     let h = if valley == 0 {
         bed
     } else {
-        lerp(bed, land(seed, x, y).max(bank), valley)
+        lerp(bed, land(seed, x, y), valley)
     };
     let h = h.clamp(MIN_HEIGHT.to_bits(), MAX_HEIGHT.to_bits());
     if !with_wetness {
@@ -272,7 +274,7 @@ mod tests {
         assert_eq!(grid_hash(1), TERRAIN_GOLDEN);
     }
 
-    const TERRAIN_GOLDEN: u64 = 0xb518d3c0a2f21357;
+    const TERRAIN_GOLDEN: u64 = 0xd340f7424af754dc;
 
     #[test]
     fn heights_stay_in_range_and_are_continuous() {
