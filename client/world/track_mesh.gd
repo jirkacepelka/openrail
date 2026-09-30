@@ -5,9 +5,14 @@ extends Node3D
 ## above the surface. The simulation's tracks are straight 2D segments; only
 ## the rendering follows the terrain for now.
 ##
+## From far away (camera further than LINES_FROM) the tracks are also drawn
+## as thin lines, so the network stays readable on the map.
+##
 ## Materials are plain StandardMaterial3Ds named M_Ballast, M_Rail and
 ## M_Sleeper: ArtStyle repaints them, and uses art/materials/M_*.tres
 ## instead once the art team adds those files.
+
+const Ground := preload("res://world/ground.gd")
 
 const SAMPLE_STEP := 10.0 ## Metres between height samples along a track.
 const GAUGE := 1.435
@@ -20,12 +25,16 @@ const SLEEPER_SIZE := Vector3(2.6, 0.14, 0.26)
 const RAIL_WIDTH := 0.08
 const RAIL_HEIGHT := 0.16
 const WATER_CLEARANCE := 1.5 ## Track height above water on crossings.
+const LINES_FROM := 1800.0 ## Camera distance from which the map lines show.
+const LINES_LIFT := 5.0 ## Map lines float this high over coarse far terrain.
 
 var sim: SimWorld
 
 var _bed: MeshInstance3D
 var _rails: MeshInstance3D
 var _sleepers: MultiMeshInstance3D
+var _lines: MeshInstance3D
+var _line_points := PackedVector3Array()
 var _water_level := 0.0
 
 
@@ -45,7 +54,25 @@ func setup(p_sim: SimWorld) -> void:
 	_sleepers.multimesh = mm
 	_sleepers.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(_sleepers)
+	var lines_mat := StandardMaterial3D.new()
+	lines_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	lines_mat.albedo_color = Color(0.2, 0.18, 0.2)
+	_lines = _mesh_node("MapLines", lines_mat)
+	_lines.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_lines.visible = false
 	rebuild()
+
+
+func _process(_delta: float) -> void:
+	var cam := get_viewport().get_camera_3d()
+	if cam == null:
+		return
+	var far := cam.global_position.y - Ground.height_at(sim, cam.global_position.x,
+			cam.global_position.z) > LINES_FROM * 0.6
+	var d: Variant = cam.get("distance")
+	if d is float:
+		far = d > LINES_FROM
+	_lines.visible = far and not _line_points.is_empty()
 
 
 ## Height of the track's centre line on the ground at sim (x, y), before
@@ -62,6 +89,7 @@ func rebuild() -> void:
 	bed.begin(Mesh.PRIMITIVE_TRIANGLES)
 	rails.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var sleepers: Array[Transform3D] = []
+	_line_points.clear()
 	var any := false
 	for i in range(0, segments.size() - 1, 2):
 		var a := segments[i]
@@ -72,6 +100,13 @@ func rebuild() -> void:
 		any = true
 	_bed.mesh = _commit(bed, any)
 	_rails.mesh = _commit(rails, any)
+	var lines := ImmediateMesh.new()
+	if not _line_points.is_empty():
+		lines.surface_begin(Mesh.PRIMITIVE_LINES)
+		for p in _line_points:
+			lines.surface_add_vertex(p)
+		lines.surface_end()
+	_lines.mesh = lines
 	var mm := _sleepers.multimesh
 	mm.instance_count = sleepers.size()
 	for i in sleepers.size():
@@ -109,6 +144,8 @@ func _add_track(a: Vector2, b: Vector2, bed: SurfaceTool, rails: SurfaceTool,
 		centre.append(Vector3(c.x, top, c.y))
 		if i == 0:
 			continue
+		_line_points.append(centre[i - 1] + Vector3(0.0, LINES_LIFT, 0.0))
+		_line_points.append(centre[i] + Vector3(0.0, LINES_LIFT, 0.0))
 		var c0 := pts[(i - 1) * 3]
 		var top0 := centre[i - 1].y
 		var s3 := Vector3(side.x, 0.0, side.y)
