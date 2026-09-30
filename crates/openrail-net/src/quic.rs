@@ -299,10 +299,19 @@ enum Event {
 /// is dropped: about a minute and a half of ticks.
 const WRITE_QUEUE: usize = 1024;
 
+/// How far the host may fall behind its tick schedule (a stall, a
+/// suspended machine) before it stops catching up and carries on from now.
+const MAX_TICK_LAG: Duration = Duration::from_secs(1);
+
 /// Runs the lockstep host on `endpoint` until `shutdown` resolves: accepts
 /// connections, feeds their messages to the host, executes a tick every
 /// `tick_interval` and delivers what the host sends. `on_tick` runs after
 /// every tick with the host locked (autosave, logging).
+///
+/// Ticks follow a fixed schedule (tick n is due at start + n *
+/// `tick_interval`); a wake-up that comes late runs every tick that is due,
+/// so the game keeps its speed even where timers are coarse (about 15.6 ms
+/// on Windows). Only a lag beyond [`MAX_TICK_LAG`] is dropped.
 pub async fn run_host(
     endpoint: Endpoint,
     host: Arc<Mutex<LockstepHost>>,
@@ -313,16 +322,27 @@ pub async fn run_host(
     let (events_tx, mut events) = mpsc::channel::<Event>(4096);
     let accept = tokio::spawn(accept_loop(endpoint.clone(), events_tx));
     let mut writers: HashMap<ConnId, mpsc::Sender<WriterCmd>> = HashMap::new();
-    let mut interval = tokio::time::interval(tick_interval);
-    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    let tick_interval = tick_interval.max(Duration::from_micros(100));
+    let max_burst = (MAX_TICK_LAG.as_nanos() / tick_interval.as_nanos()).max(1);
+    let mut next_tick = tokio::time::Instant::now() + tick_interval;
     tokio::pin!(shutdown);
 
     loop {
         let outputs = tokio::select! {
-            _ = interval.tick() => {
+            _ = tokio::time::sleep_until(next_tick) => {
                 let mut h = host.lock().unwrap();
-                h.tick();
-                on_tick(&h);
+                let now = tokio::time::Instant::now();
+                let mut ran = 0;
+                while next_tick <= now && ran < max_burst {
+                    h.tick();
+                    on_tick(&h);
+                    next_tick += tick_interval;
+                    ran += 1;
+                }
+                if next_tick <= now {
+                    warn!("host fell more than {MAX_TICK_LAG:?} behind; skipping ahead");
+                    next_tick = now + tick_interval;
+                }
                 h.drain_output()
             }
             Some(ev) = events.recv() => {
