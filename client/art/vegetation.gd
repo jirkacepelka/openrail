@@ -18,6 +18,7 @@ const TREE_SCENES := {
 	"conifer": "res://assets/nature/tree_conifer.glb",
 }
 const GROUND_SCRIPT := "res://world/ground.gd"
+const TOWNS_LAYOUT_SCRIPT := "res://world/towns_layout.gd"
 const BROADLEAF_GREENS := [Color(0.34, 0.52, 0.24), Color(0.46, 0.54, 0.22), Color(0.28, 0.46, 0.30)]
 const CONIFER_GREENS := [Color(0.20, 0.36, 0.27), Color(0.24, 0.40, 0.26), Color(0.18, 0.32, 0.28)]
 
@@ -76,6 +77,7 @@ func build(sim: Object, seed_value: int, material_converter: Callable) -> void:
 	_meshes["deciduous_far"] = _far_mesh(false)
 	_meshes["conifer_far"] = _far_mesh(true)
 	_scatter(mask, seed_value)
+	_hedgerows(towns, seed_value)
 	_clear_tracks()
 	for key in _chunks:
 		_rebuild_chunk(key)
@@ -92,19 +94,29 @@ func _process(delta: float) -> void:
 	_clear_tracks()
 
 
+## Each town as [centre, area to keep clear, layout or {}]. With the town
+## layouts (world/towns_layout.gd) the clear area is the town and its own
+## fields; otherwise an estimate from the population.
 func _towns() -> Array:
 	var out := []
 	if not _sim.has_method("town_positions"):
 		return out
+	var layout_script: Script = load(TOWNS_LAYOUT_SCRIPT) if ResourceLoader.exists(TOWNS_LAYOUT_SCRIPT) else null
 	var pos: PackedVector2Array = _sim.town_positions()
+	var names: PackedStringArray = _sim.town_names()
 	var pops: PackedInt64Array = _sim.town_populations()
 	for i in pos.size():
 		var pop := pops[i] if i < pops.size() else 1000
-		# Bigger towns clear a bigger area.
-		out.append([pos[i], town_clear_radius + sqrt(float(pop)) * 5.0])
+		if layout_script != null and i < names.size():
+			var layout: Dictionary = layout_script.call("generate", pos[i], names[i], int(pop))
+			out.append([pos[i], float(layout["field_radius"]) + 60.0, layout])
+		else:
+			out.append([pos[i], town_clear_radius + sqrt(float(pop)) * 5.0 + farmland_radius, {}])
 	return out
 
 
+## R = forest density, G = farmland outside the towns, B = keep clear (towns
+## and their fields).
 func _build_mask(seed_value: int, towns: Array) -> Image:
 	var forest_noise := FastNoiseLite.new()
 	forest_noise.seed = seed_value
@@ -114,7 +126,7 @@ func _build_mask(seed_value: int, towns: Array) -> Image:
 	farm_noise.seed = seed_value + 7
 	farm_noise.frequency = 1.0 / 3000.0
 	farm_noise.fractal_octaves = 3
-	var img := Image.create(mask_size, mask_size, false, Image.FORMAT_RG8)
+	var img := Image.create(mask_size, mask_size, false, Image.FORMAT_RGB8)
 	var px := extent / mask_size
 	for y in mask_size:
 		for x in mask_size:
@@ -122,17 +134,74 @@ func _build_mask(seed_value: int, towns: Array) -> Image:
 			var wz := -extent * 0.5 + (y + 0.5) * px
 			var forest := smoothstep(0.18, 0.36, forest_noise.get_noise_2d(wx, wz))
 			var farm := smoothstep(0.25, 0.4, farm_noise.get_noise_2d(wx, wz)) * 0.8
-			# Ragged edges, so farmland doesn't form circles around towns.
-			var wobble := forest_noise.get_noise_2d(wz * 5.0 + 911.0, wx * 5.0) * 900.0
+			var keep_clear := 0.0
 			for t in towns:
-				var d: float = (t[0] as Vector2).distance_to(Vector2(wx, wz)) + wobble
+				var d: float = (t[0] as Vector2).distance_to(Vector2(wx, wz))
 				var r: float = t[1]
-				forest *= smoothstep(r, r + 500.0, d)
-				# Fields ring the towns and thin out into meadows further away.
-				farm = maxf(farm, 1.0 - smoothstep(r + farmland_radius * 0.5, r + farmland_radius, d))
+				# The town draws its own fields; ours start further out.
+				forest *= smoothstep(r, r + 450.0, d)
+				farm *= smoothstep(r, r + 300.0, d)
+				keep_clear = maxf(keep_clear, 1.0 - smoothstep(r - px, r, d))
 			forest *= 1.0 - smoothstep(0.3, 0.6, farm)
-			img.set_pixel(x, y, Color(forest, farm, 0.0))
+			img.set_pixel(x, y, Color(forest, farm, keep_clear))
 	return img
+
+
+## Trees along some edges of the towns' fields, clear of the roads.
+func _hedgerows(towns: Array, seed_value: int) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_value * 17 + 3
+	for t in towns:
+		var layout: Dictionary = t[2]
+		if layout.is_empty():
+			continue
+		var roads: Array = []
+		for street in layout["streets"]:
+			var pts: PackedVector2Array = street["points"]
+			for k in pts.size() - 1:
+				roads.append([pts[k], pts[k + 1], float(street["half_width"]) + 5.0])
+		var built := float(layout["radius"]) + 20.0
+		var centre: Vector2 = layout["center"]
+		for field in layout["fields"]:
+			var c := _rect_corners(field)
+			for e in 4:
+				if rng.randf() > 0.45:
+					continue # most field edges have no hedge
+				var a: Vector2 = c[e]
+				var b: Vector2 = c[(e + 1) % 4]
+				var steps := int(a.distance_to(b) / 11.0)
+				for k in steps:
+					if rng.randf() > 0.7:
+						continue
+					var p := a.lerp(b, (k + rng.randf_range(0.3, 0.7)) / steps)
+					if p.distance_to(centre) < built or _near_road(p, roads):
+						continue
+					_plant("deciduous", p, rng)
+
+
+func _rect_corners(r: Dictionary) -> Array[Vector2]:
+	var pos: Vector2 = r["pos"]
+	var h: Vector2 = r["size"] * 0.5
+	var ax := Vector2.from_angle(r["angle"])
+	var ay := Vector2(-ax.y, ax.x)
+	return [pos - ax * h.x - ay * h.y, pos + ax * h.x - ay * h.y, pos + ax * h.x + ay * h.y, pos - ax * h.x + ay * h.y]
+
+
+func _near_road(p: Vector2, roads: Array) -> bool:
+	for r in roads:
+		if Geometry2D.get_closest_point_to_segment(p, r[0], r[1]).distance_to(p) < r[2]:
+			return true
+	return false
+
+
+func _plant(kind: String, p: Vector2, rng: RandomNumberGenerator) -> void:
+	var s := rng.randf_range(1.0, 1.6)
+	var basis := Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(s, s * rng.randf_range(0.9, 1.15), s))
+	var xf := Transform3D(basis, Vector3(p.x, _height(p.x, p.y) - 0.3, p.y))
+	var key := Vector2i(floori(p.x / chunk_size), floori(p.y / chunk_size))
+	var chunk: Dictionary = _chunks.get_or_add(key, {})
+	var entry: Dictionary = chunk.get_or_add(kind, {"xforms": []})
+	entry["xforms"].append(xf)
 
 
 func _scatter(mask: Image, seed_value: int) -> void:
@@ -143,6 +212,8 @@ func _scatter(mask: Image, seed_value: int) -> void:
 		for x in mask_size:
 			var c := mask.get_pixel(x, y)
 			var count := 0
+			if c.b > 0.5:
+				continue # a town or its fields
 			if c.r > 0.05:
 				count = int(round(c.r * trees_per_forest_pixel))
 			elif c.g < 0.3 and rng.randf() < meadow_tree_chance:
@@ -154,14 +225,7 @@ func _scatter(mask: Image, seed_value: int) -> void:
 			for i in count:
 				var wx := -extent * 0.5 + (x + rng.randf()) * px
 				var wz := -extent * 0.5 + (y + rng.randf()) * px
-				var kind := "conifer" if rng.randf() < conifer_share else "deciduous"
-				var s := rng.randf_range(1.0, 1.6)
-				var basis := Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(s, s * rng.randf_range(0.9, 1.15), s))
-				var xf := Transform3D(basis, Vector3(wx, _height(wx, wz) - 0.3, wz))
-				var key := Vector2i(floori(wx / chunk_size), floori(wz / chunk_size))
-				var chunk: Dictionary = _chunks.get_or_add(key, {})
-				var entry: Dictionary = chunk.get_or_add(kind, {"xforms": []})
-				entry["xforms"].append(xf)
+				_plant("conifer" if rng.randf() < conifer_share else "deciduous", Vector2(wx, wz), rng)
 
 
 func _height(x: float, z: float) -> float:
