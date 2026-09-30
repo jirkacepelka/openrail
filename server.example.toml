@@ -5,6 +5,8 @@ bind = "0.0.0.0:7878"
 # Game traffic (QUIC, UDP). Same port number as the admin API is fine.
 game_bind = "0.0.0.0:7878"
 
+# World seed. It also shapes the terrain, so keep it unchanged while
+# continuing a saved world.
 seed = 1
 save_path = "world.bin"
 autosave_ticks = 3000

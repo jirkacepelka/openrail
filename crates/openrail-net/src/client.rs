@@ -64,6 +64,7 @@ pub struct LockstepClient {
     state: ClientState,
     player_id: Option<PlayerId>,
     world: Option<World>,
+    terrain_seed: u64,
     hash_interval: u64,
     bundles: VecDeque<TickBundle>,
     players: Vec<PlayerInfo>,
@@ -81,6 +82,7 @@ impl LockstepClient {
             state: ClientState::Connecting,
             player_id: None,
             world: None,
+            terrain_seed: 0,
             hash_interval: 0,
             bundles: VecDeque::new(),
             players: Vec::new(),
@@ -102,6 +104,12 @@ impl LockstepClient {
 
     pub fn player_id(&self) -> Option<PlayerId> {
         self.player_id
+    }
+
+    /// Seed of the host's world (from the Welcome): the terrain is a
+    /// function of it. 0 before joining.
+    pub fn terrain_seed(&self) -> u64 {
+        self.terrain_seed
     }
 
     /// The local copy of the world, once joined.
@@ -195,6 +203,7 @@ impl LockstepClient {
                 player_id,
                 tick,
                 snapshot,
+                terrain_seed,
                 hash_interval,
                 players,
             } => {
@@ -206,6 +215,7 @@ impl LockstepClient {
                 if self.load(tick, &snapshot) {
                     self.state = ClientState::Playing;
                     self.player_id = Some(player_id);
+                    self.terrain_seed = terrain_seed;
                     self.hash_interval = hash_interval.max(1);
                     self.players = players;
                     self.events.push(ClientEvent::Joined { player_id, tick });

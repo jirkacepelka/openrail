@@ -244,6 +244,11 @@ impl RemoteClient {
         self.client.player_id()
     }
 
+    /// Seed of the host's world, for the terrain (0 before joining).
+    pub fn terrain_seed(&self) -> u64 {
+        self.client.terrain_seed()
+    }
+
     /// The confirmed world, once joined. It stays readable after the
     /// connection closes.
     pub fn world(&self) -> Option<&World> {

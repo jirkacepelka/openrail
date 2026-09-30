@@ -68,6 +68,8 @@ func setup(p_sim: SimWorld, p_camera: Camera3D, p_overlay: BuildOverlay,
 	sink.world_changed.connect(_on_world_changed)
 	camera = p_camera
 	overlay = p_overlay
+	if overlay != null:
+		overlay.sim = sim
 	refresh_cache()
 	_set_hint(_default_hint())
 
@@ -265,7 +267,7 @@ func _update_ground() -> void:
 	var vp := camera.get_viewport()
 	if vp.gui_get_hovered_control() != null:
 		return
-	var hit: Variant = GroundPick.pick_mouse(camera)
+	var hit: Variant = GroundPick.pick_mouse(camera, sim)
 	if hit is Vector3:
 		_ground = GroundPick.to_sim(hit as Vector3)
 		_has_ground = true

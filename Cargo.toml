@@ -21,3 +21,8 @@ serde_json = "1"
 tracing = "0.1"
 tracing-subscriber = "0.3"
 godot = { version = "0.5", default-features = false, features = ["api-4-4"] }
+
+# The terrain noise runs every frame in the client (mesh building,
+# picking); keep it fast in debug builds too.
+[profile.dev.package.openrail-sim]
+opt-level = 3

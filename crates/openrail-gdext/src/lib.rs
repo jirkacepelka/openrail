@@ -3,7 +3,9 @@
 mod net;
 
 use godot::prelude::*;
-use openrail_sim::{Command, CommandError, Fixed, NodeId, PlayerId, TrackId, TrainId, Vec2, World};
+use openrail_sim::{
+    terrain, Command, CommandError, Fixed, NodeId, PlayerId, TrackId, TrainId, Vec2, World,
+};
 
 fn vector2(p: Vec2) -> Vector2 {
     Vector2::new(p.x.to_f64_lossy() as f32, p.y.to_f64_lossy() as f32)
@@ -43,6 +45,9 @@ pub struct SimWorld {
     player: PlayerId,
     /// Read-only view of a `NetClient`'s world.
     remote: bool,
+    /// Seed the world was made from; the terrain is a function of it. Not
+    /// part of the world state (a remote view gets it from the Welcome).
+    terrain_seed: u64,
     last_error: GString,
     error_count: i64,
     base: Base<RefCounted>,
@@ -55,6 +60,7 @@ impl IRefCounted for SimWorld {
             world: World::new(0),
             player: LOCAL_PLAYER,
             remote: false,
+            terrain_seed: 0,
             last_error: GString::new(),
             error_count: 0,
             base,
@@ -62,7 +68,34 @@ impl IRefCounted for SimWorld {
     }
 }
 
+/// Ground height in metres at (x, y) metres (rendering and picking only).
+fn terrain_height_f(seed: u64, x: f64, y: f64) -> f32 {
+    terrain::height(seed, fixed_from_f64(x), fixed_from_f64(y)).to_f64_lossy() as f32
+}
+
 impl SimWorld {
+    fn grid(
+        &self,
+        x0: f64,
+        y0: f64,
+        step: f64,
+        nx: i64,
+        ny: i64,
+        f: impl Fn(u64, f64, f64) -> f32,
+    ) -> PackedFloat32Array {
+        // Guard against absurd sizes (a typo would freeze the game).
+        let (nx, ny) = (nx.clamp(0, 4096), ny.clamp(0, 4096));
+        let mut out = Vec::with_capacity((nx * ny) as usize);
+        for iy in 0..ny {
+            for ix in 0..nx {
+                let x = x0 + ix as f64 * step;
+                let y = y0 + iy as f64 * step;
+                out.push(f(self.terrain_seed, x, y));
+            }
+        }
+        PackedFloat32Array::from(out.as_slice())
+    }
+
     /// Apply a command as `player` to a local world, remembering the error
     /// text. A remote view refuses every command (submit them through
     /// `NetClient`) without touching the error record.
@@ -92,6 +125,7 @@ impl SimWorld {
             return;
         }
         self.world = World::new(seed as u64);
+        self.terrain_seed = seed as u64;
     }
 
     #[func]
@@ -394,6 +428,61 @@ impl SimWorld {
     #[func]
     fn error_count(&self) -> i64 {
         self.error_count
+    }
+
+    /// Seed the terrain is computed from (the world seed; online, the
+    /// server's).
+    #[func]
+    fn terrain_seed(&self) -> i64 {
+        self.terrain_seed as i64
+    }
+
+    /// Ground height in metres at sim position (x, y) metres. The terrain
+    /// is a pure function of the world seed, identical on every machine.
+    #[func]
+    fn terrain_height(&self, x: f64, y: f64) -> f64 {
+        f64::from(terrain_height_f(self.terrain_seed, x, y))
+    }
+
+    /// Heights of an `nx` by `ny` grid starting at (x0, y0) with `step`
+    /// metres between points, row by row (x fastest): index `iy * nx + ix`
+    /// is the height at (x0 + ix * step, y0 + iy * step).
+    #[func]
+    fn terrain_heights(&self, x0: f64, y0: f64, step: f64, nx: i64, ny: i64) -> PackedFloat32Array {
+        self.grid(x0, y0, step, nx, ny, terrain_height_f)
+    }
+
+    /// Wetness (0 dry to 1 river or lake shore) on the same grid as
+    /// `terrain_heights`.
+    #[func]
+    fn terrain_wetness(&self, x0: f64, y0: f64, step: f64, nx: i64, ny: i64) -> PackedFloat32Array {
+        self.grid(x0, y0, step, nx, ny, |s, x, y| {
+            terrain::sample(s, fixed_from_f64(x), fixed_from_f64(y))
+                .wetness
+                .to_f64_lossy() as f32
+        })
+    }
+
+    /// Heights at a list of sim positions (tracks, markers, picking).
+    #[func]
+    fn terrain_heights_at(&self, points: PackedVector2Array) -> PackedFloat32Array {
+        points
+            .as_slice()
+            .iter()
+            .map(|p| terrain_height_f(self.terrain_seed, f64::from(p.x), f64::from(p.y)))
+            .collect()
+    }
+
+    /// Height of the water surface of rivers and lakes, in metres.
+    #[func]
+    fn terrain_water_level(&self) -> f64 {
+        terrain::WATER_LEVEL.to_f64_lossy()
+    }
+
+    /// Highest possible terrain height, in metres (for picking bounds).
+    #[func]
+    fn terrain_max_height(&self) -> f64 {
+        terrain::MAX_HEIGHT.to_f64_lossy()
     }
 
     /// `true` if the last rejected command failed for lack of money.

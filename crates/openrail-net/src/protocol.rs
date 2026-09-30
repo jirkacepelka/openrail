@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 
 /// Bumped on every incompatible change to these messages or to the
 /// simulation's save format. Peers with different versions refuse to play.
-pub const PROTOCOL_VERSION: u32 = 1;
+pub const PROTOCOL_VERSION: u32 = 2;
 
 /// ALPN protocol id used on the QUIC handshake.
 pub const ALPN: &[u8] = b"openrail/1";
@@ -51,11 +51,14 @@ pub enum ClientMsg {
 pub enum ServerMsg {
     /// Accepted the Hello. `snapshot` is `World::save()` taken when the
     /// host's world was at `tick`; the next bundle the client receives is
-    /// the one for `tick`.
+    /// the one for `tick`. `terrain_seed` is the seed the world was made
+    /// from: the terrain is a function of it (`openrail_sim::terrain`) and
+    /// not part of the snapshot.
     Welcome {
         player_id: PlayerId,
         tick: u64,
         snapshot: Vec<u8>,
+        terrain_seed: u64,
         hash_interval: u64,
         players: Vec<PlayerInfo>,
     },

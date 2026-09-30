@@ -50,6 +50,14 @@ func _run() -> void:
 	_check(session.world.is_remote(), "world is a remote view")
 	_check(session.world.player_id() == session.player_id, "view shows our company")
 	_check(statuses.size() >= 2, "status went through %s" % str(statuses))
+	# The terrain is not in the snapshot: the view computes it from the
+	# server's seed (3 in tests/test_server.gd), exactly like a local world.
+	var local := SimWorld.new()
+	local.new_world(3)
+	_check(session.world.terrain_seed() == 3, "view knows the server's terrain seed")
+	_check(session.world.terrain_heights(-3000, 1000, 250, 24, 24)
+			== local.terrain_heights(-3000, 1000, 250, 24, 24),
+			"remote and local terrain heights are identical")
 
 	# The gameplay layer on the remote world, as a game scene would set it up.
 	var scene := Node3D.new()

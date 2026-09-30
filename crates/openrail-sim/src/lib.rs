@@ -11,6 +11,7 @@ pub mod fixed;
 pub mod network;
 pub mod replay;
 pub mod rng;
+pub mod terrain;
 pub mod world;
 
 pub use calendar::{Date, TICKS_PER_DAY, TICKS_PER_HOUR};
@@ -19,6 +20,7 @@ pub use economy::{Company, EconomyRules, Money, Town, TownId, TrainCargo};
 pub use fixed::Fixed;
 pub use replay::{Replay, ScheduledCommand};
 pub use rng::SimRng;
+pub use terrain::TerrainSample;
 pub use world::{LoadError, Node, NodeId, Track, TrackId, Train, TrainId, Vec2, World};
 
 /// Simulation rate. Rendering interpolates between ticks.

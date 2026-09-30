@@ -142,6 +142,7 @@ impl NetClient {
         let mut view = self.view.bind_mut();
         view.world.clone_from(world);
         view.player = remote.player_id().unwrap_or(PlayerId(0));
+        view.terrain_seed = remote.terrain_seed();
     }
 }
 

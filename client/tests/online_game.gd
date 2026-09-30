@@ -84,8 +84,9 @@ func _run() -> void:
 	controller.cancel()
 	_check(await _wait(func() -> bool: return sim.tracks().size() == 1), "track built online")
 	await process_frame
-	var track_mesh: MeshInstance3D = game.get("track_mesh")
-	_check(track_mesh != null and track_mesh.mesh.get_surface_count() == 1,
+	var tracks: Node3D = game.get("track_mesh")
+	var bed: MeshInstance3D = tracks.get_node("Ballast") if tracks != null else null
+	_check(bed != null and bed.mesh != null and bed.mesh.get_surface_count() == 1,
 			"the game scene redrew the network")
 	controller.set_tool(Tools.Tool.STATION)
 	_click(Vector2(5000, 5000))
