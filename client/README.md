@@ -1,7 +1,8 @@
 # OpenRail Godot client
 
 Requires Godot 4.4+ and the `openrail-gdext` library built with
-`cargo build -p openrail-gdext` (see `openrail.gdextension`).
+`cargo build -p openrail-gdext` copied to `client/bin/` (see "Building and
+smoke test" below).
 
 ## Controls
 
@@ -37,12 +38,22 @@ stops.
 - `ui/`: toolbar, train/line panel, node tooltip. Built in code, no scenes.
 - `main.gd` redraws the network when `gameplay.network_changed` fires.
 
-## Smoke test
+## Building and smoke test
+
+The client needs the `openrail-gdext` library inside the project, in
+`client/bin/` (ignored by version control; `openrail.gdextension` points there
+so exports include it). After every Rust change:
+
+```
+cargo build -p openrail-gdext          # add --release for a release build
+tools/copy-gdext.sh debug              # or: release (Linux and Windows Git Bash)
+```
+
+To make a playable export locally, see `docs/releasing.md`.
 
 A headless test drives the build tools through a whole line (track, stations, train, route) and checks the train reaches the far station. CI runs it on every push:
 
 ```
-cargo build -p openrail-gdext
 godot --headless --import --path client
 godot --headless --path client --script res://tests/smoke_build.gd
 ```

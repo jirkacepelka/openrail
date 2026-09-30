@@ -1,0 +1,156 @@
+name: Release
+
+# Tag v* : build Windows and Linux, publish a GitHub pre-release.
+# Manual run: build both and keep them as workflow artifacts (no release).
+# Pull request touching the client or packaging: check the Windows export only.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "client/**"
+      - "crates/openrail-gdext/**"
+      - "tools/**"
+      - "Cargo.toml"
+      - ".github/workflows/release.yml"
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Check tag matches the Cargo version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          version="$(tools/set-version.sh)"
+          if [ "v$version" != "${GITHUB_REF_NAME}" ]; then
+            echo "tag ${GITHUB_REF_NAME} does not match Cargo.toml version $version" >&2
+            exit 1
+          fi
+      - name: Set version in export presets
+        run: tools/set-version.sh
+      - name: Build Rust (release)
+        run: cargo build --release -p openrail-gdext -p openrail-server
+      - name: Copy GDExtension into the Godot project
+        run: tools/copy-gdext.sh release
+      - name: Cache Godot and export templates
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/godot-ci
+            ~/AppData/Roaming/Godot
+          key: godot-4.4.1-windows-v1
+      - name: Install Godot 4.4.1 and export templates
+        run: tools/setup-godot.sh windows
+      - name: Import project
+        working-directory: client
+        run: ~/godot-ci/godot.exe --headless --import --path .
+      - name: Export Windows build
+        working-directory: client
+        run: |
+          mkdir -p build/windows
+          ~/godot-ci/godot.exe --headless --path . --export-release "Windows Desktop"
+          ls -la build/windows
+          test -f build/windows/OpenRail.exe
+          test -f build/windows/openrail_gdext.dll
+      - name: Package
+        run: |
+          d=OpenRail-windows-x64
+          mkdir "$d"
+          cp client/build/windows/OpenRail.exe client/build/windows/openrail_gdext.dll "$d/"
+          cp target/release/openrail-server.exe server.example.toml LICENSE "$d/"
+          cp tools/release-readme.txt "$d/README.txt"
+          python -m zipfile -c "$d.zip" "$d"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: OpenRail-windows-x64
+          path: OpenRail-windows-x64.zip
+          if-no-files-found: error
+          retention-days: 14
+
+  linux:
+    # Pull requests only check the Windows export.
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Set version in export presets
+        run: tools/set-version.sh
+      - name: Build Rust (release)
+        run: cargo build --release -p openrail-gdext -p openrail-server
+      - name: Copy GDExtension into the Godot project
+        run: tools/copy-gdext.sh release
+      - name: Cache Godot and export templates
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/godot-ci
+            ~/.local/share/godot/export_templates
+          key: godot-4.4.1-linux-v1
+      - name: Install Godot 4.4.1 and export templates
+        run: tools/setup-godot.sh linux
+      - name: Import project
+        working-directory: client
+        run: ~/godot-ci/godot --headless --import --path .
+      - name: Export Linux build
+        working-directory: client
+        run: |
+          mkdir -p build/linux
+          ~/godot-ci/godot --headless --path . --export-release "Linux"
+          ls -la build/linux
+          test -f build/linux/OpenRail.x86_64
+          test -f build/linux/libopenrail_gdext.so
+      - name: Package
+        run: |
+          d=OpenRail-linux-x64
+          mkdir "$d"
+          cp client/build/linux/OpenRail.x86_64 client/build/linux/libopenrail_gdext.so "$d/"
+          cp target/release/openrail-server server.example.toml LICENSE "$d/"
+          cp tools/release-readme.txt "$d/README.txt"
+          chmod +x "$d/OpenRail.x86_64" "$d/openrail-server"
+          tar -czf "$d.tar.gz" "$d"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: OpenRail-linux-x64
+          path: OpenRail-linux-x64.tar.gz
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [windows, linux]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - run: ls -la dist
+      - uses: softprops/action-gh-release@v2
+        with:
+          prerelease: true
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            dist/OpenRail-windows-x64.zip
+            dist/OpenRail-linux-x64.tar.gz
