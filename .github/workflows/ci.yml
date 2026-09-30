@@ -33,3 +33,22 @@ jobs:
       - name: Build GDExtension
         if: matrix.os == 'ubuntu-latest'
         run: cargo build -p openrail-gdext
+
+  godot-smoke:
+    runs-on: ubuntu-latest
+    env:
+      GODOT_VERSION: 4.4.1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build -p openrail-gdext
+      - name: Install Godot
+        run: |
+          curl -sSL -o godot.zip "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip"
+          unzip -q godot.zip
+          mv "Godot_v${GODOT_VERSION}-stable_linux.x86_64" godot
+      - name: Import project
+        run: ./godot --headless --import --path client
+      - name: Build tools smoke test
+        run: ./godot --headless --path client --script res://tests/smoke_build.gd

@@ -151,6 +151,75 @@ impl SimWorld {
         self.world.apply(LOCAL_PLAYER, &cmd).is_ok()
     }
 
+    /// All nodes as `{id, x, y, station}` (rendering and UI only, lossy).
+    #[func]
+    fn nodes(&self) -> Array<VarDictionary> {
+        let mut out = Array::new();
+        for (id, n) in self.world.nodes() {
+            let p = vector2(n.pos);
+            out.push(&vdict! {
+                "id" => i64::from(id.0),
+                "x" => p.x,
+                "y" => p.y,
+                "station" => n.station,
+            });
+        }
+        out
+    }
+
+    /// All tracks as `{id, a, b}` with node ids for `a` and `b`.
+    #[func]
+    fn tracks(&self) -> Array<VarDictionary> {
+        let mut out = Array::new();
+        for (id, t) in self.world.tracks() {
+            out.push(&vdict! {
+                "id" => i64::from(id.0),
+                "a" => i64::from(t.a.0),
+                "b" => i64::from(t.b.0),
+            });
+        }
+        out
+    }
+
+    /// All trains as `{id, track, stops, x, y}` where `stops` is a
+    /// `PackedInt64Array` of station node ids (empty in shuttle mode).
+    #[func]
+    fn trains(&self) -> Array<VarDictionary> {
+        let mut out = Array::new();
+        for (id, t) in self.world.trains() {
+            let stops: PackedInt64Array = t.stops.iter().map(|s| i64::from(s.0)).collect();
+            let p = self
+                .world
+                .train_position(id)
+                .map(vector2)
+                .unwrap_or_default();
+            out.push(&vdict! {
+                "id" => i64::from(id.0),
+                "track" => i64::from(t.track.0),
+                "stops" => &stops,
+                "x" => p.x,
+                "y" => p.y,
+            });
+        }
+        out
+    }
+
+    /// Id of the node closest to (x, y) within `radius` metres, or -1.
+    /// Ties go to the lowest id. Used for UI snapping only.
+    #[func]
+    fn nearest_node(&self, x: f64, y: f64, radius: f64) -> i64 {
+        let mut best: Option<(f64, u32)> = None;
+        for (id, n) in self.world.nodes() {
+            let dx = n.pos.x.to_f64_lossy() - x;
+            let dy = n.pos.y.to_f64_lossy() - y;
+            let d = (dx * dx + dy * dy).sqrt();
+            if d <= radius && best.map_or(true, |(bd, _)| d < bd) {
+                best = Some((d, id.0));
+            }
+        }
+        best.map_or(-1, |(_, id)| i64::from(id))
+    }
+
     /// Track end points in metres, two entries per track (rendering only).
     #[func]
     fn track_segments(&self) -> PackedVector2Array {

@@ -3,11 +3,15 @@ extends Node3D
 ## that follow each other under block signals. Sim coordinates (x, y) map
 ## to Godot's ground plane (x, z).
 
+const GameplayRoot := preload("res://gameplay/gameplay_root.gd")
+
 const TICK_SECONDS := 0.1 # sim runs at 10 Hz
 
 var sim: SimWorld
 var train_meshes: Array[MeshInstance3D] = []
 var accumulator := 0.0
+var track_mesh: MeshInstance3D
+var gameplay: GameplayRoot
 
 
 func _ready() -> void:
@@ -34,9 +38,16 @@ func _ready() -> void:
 	_draw_tracks()
 	for i in 3:
 		_create_train(Color.from_hsv(i / 3.0, 0.8, 0.85))
+	# Gameplay layer: build tools, line panel and RTS camera input.
+	gameplay = GameplayRoot.new()
+	add_child(gameplay)
+	gameplay.setup(sim, $Camera3D as Camera3D)
+	gameplay.network_changed.connect(_draw_tracks)
 
 
 func _draw_tracks() -> void:
+	if track_mesh != null:
+		track_mesh.queue_free() # rebuilt after every change to the network
 	var segments := sim.track_segments()
 	var mesh := ImmediateMesh.new()
 	mesh.surface_begin(Mesh.PRIMITIVE_LINES)
@@ -50,6 +61,7 @@ func _draw_tracks() -> void:
 	inst.mesh = mesh
 	inst.material_override = mat
 	add_child(inst)
+	track_mesh = inst
 
 
 func _create_train(color: Color) -> void:
@@ -72,6 +84,9 @@ func _process(delta: float) -> void:
 		accumulator -= TICK_SECONDS
 		sim.step()
 	var positions := sim.train_positions()
+	# Trains bought through the build tools get a placeholder box each.
+	while train_meshes.size() < positions.size():
+		_create_train(Color.from_hsv(fmod(train_meshes.size() * 0.618, 1.0), 0.8, 0.85))
 	for i in mini(positions.size(), train_meshes.size()):
 		var p := positions[i]
 		train_meshes[i].position = Vector3(p.x, 6.0, p.y)
