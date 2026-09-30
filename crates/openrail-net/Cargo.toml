@@ -1,0 +1,29 @@
+[package]
+name = "openrail-net"
+description = "Lockstep multiplayer protocol and QUIC transport for OpenRail"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[features]
+default = ["quic"]
+# The QUIC transport. Without it the crate is only the protocol, the framing
+# codec and the transport-agnostic lockstep state machines.
+quic = ["dep:quinn", "dep:rustls", "dep:rcgen", "dep:ring", "dep:tokio", "dep:tracing"]
+
+[dependencies]
+openrail-sim.workspace = true
+serde.workspace = true
+postcard.workspace = true
+quinn = { version = "0.11", default-features = false, features = ["runtime-tokio", "rustls-ring", "log"], optional = true }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "logging", "tls12"], optional = true }
+rcgen = { version = "0.14", default-features = false, features = ["crypto", "ring"], optional = true }
+ring = { version = "0.17", optional = true }
+tokio = { workspace = true, features = ["io-util"], optional = true }
+tracing = { workspace = true, optional = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["io-util"] }
+tracing-subscriber.workspace = true
