@@ -1,0 +1,10 @@
+target/
+client/.godot/
+client/.import/
+*.bin
+*.bin.tmp
+server.toml
+.idea/
+.vscode/
+*.swp
+.DS_Store

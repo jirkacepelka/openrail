@@ -1,0 +1,11 @@
+services:
+  openrail:
+    build: .
+    ports:
+      - "7878:7878"
+    volumes:
+      - openrail-data:/data
+    restart: unless-stopped
+
+volumes:
+  openrail-data:

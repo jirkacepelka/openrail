@@ -1,0 +1,5 @@
+# OpenRail dedicated server configuration. Pass with --config <path>.
+bind = "0.0.0.0:7878"
+seed = 1
+save_path = "world.bin"
+autosave_ticks = 3000

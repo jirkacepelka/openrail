@@ -1,0 +1,9 @@
+[configuration]
+entry_symbol = "gdext_rust_init"
+compatibility_minimum = 4.4
+
+[libraries]
+linux.debug.x86_64 = "res://../target/debug/libopenrail_gdext.so"
+linux.release.x86_64 = "res://../target/release/libopenrail_gdext.so"
+windows.debug.x86_64 = "res://../target/debug/openrail_gdext.dll"
+windows.release.x86_64 = "res://../target/release/openrail_gdext.dll"

@@ -1,0 +1,22 @@
+[workspace]
+resolver = "2"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.0.1"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/jirkacepelka/openrail"
+rust-version = "1.80"
+
+[workspace.dependencies]
+openrail-sim = { path = "crates/openrail-sim" }
+serde = { version = "1", features = ["derive"] }
+postcard = { version = "1", default-features = false, features = ["alloc"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "signal", "net", "sync"] }
+axum = "0.8"
+toml = "0.8"
+serde_json = "1"
+tracing = "0.1"
+tracing-subscriber = "0.3"
+godot = { version = "0.5", default-features = false, features = ["api-4-4"] }
