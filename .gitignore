@@ -8,3 +8,5 @@ server.toml
 .vscode/
 *.swp
 .DS_Store
+client/bin/
+client/build/

@@ -40,9 +40,13 @@ jobs:
       GODOT_VERSION: 4.4.1
     steps:
       - uses: actions/checkout@v4
+        with:
+          lfs: true
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo build -p openrail-gdext
+      - name: Copy GDExtension into the Godot project
+        run: tools/copy-gdext.sh debug
       - name: Install Godot
         run: |
           curl -sSL -o godot.zip "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip"
