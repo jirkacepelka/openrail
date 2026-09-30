@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Install Godot and its export templates for CI (Linux or Windows via Git Bash).
 # Usage: tools/setup-godot.sh linux|windows
-# Result: $HOME/godot-ci/godot (Windows: godot.exe, the console build) and the
+# Result: $HOME/godot-ci/godot (Windows: godot_console.exe, the console wrapper around godot.exe) and the
 # templates in Godot's per-user template folder. Skips what is already there,
 # so the two folders can be cached between runs.
 set -euo pipefail
@@ -31,7 +31,7 @@ PY
 
 if [ "$platform" = "windows" ]; then
   editor="Godot_v${ver}-stable_win64"
-  godot_bin="$dir/godot.exe"
+  godot_bin="$dir/godot_console.exe"
   tpl_dir="${APPDATA}/Godot/export_templates/${ver}.stable"
   tpl_files=("templates/windows_release_x86_64.exe:windows_release_x86_64.exe"
     "templates/windows_release_x86_64_console.exe:windows_release_x86_64_console.exe"
@@ -48,7 +48,9 @@ if [ ! -f "$godot_bin" ]; then
   if [ "$platform" = "windows" ]; then
     # The Windows editor zip is named after the .exe it holds.
     curl -fsSL --retry 3 -o "$dir/editor.zip" "$base/${editor}.exe.zip"
-    extract "$dir/editor.zip" "$dir" "${editor}_console.exe:godot.exe"
+    # The console wrapper starts the exe named like itself minus "_console",
+    # so both are kept, as godot.exe and godot_console.exe.
+    extract "$dir/editor.zip" "$dir" "${editor}.exe:godot.exe" "${editor}_console.exe:godot_console.exe"
   else
     curl -fsSL --retry 3 -o "$dir/editor.zip" "$base/${editor}.zip"
     extract "$dir/editor.zip" "$dir" "${editor}:godot"

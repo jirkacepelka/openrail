@@ -58,12 +58,12 @@ jobs:
         run: tools/setup-godot.sh windows
       - name: Import project
         working-directory: client
-        run: ~/godot-ci/godot.exe --headless --import --path .
+        run: ~/godot-ci/godot_console.exe --headless --import --path .
       - name: Export Windows build
         working-directory: client
         run: |
           mkdir -p build/windows
-          ~/godot-ci/godot.exe --headless --path . --export-release "Windows Desktop"
+          ~/godot-ci/godot_console.exe --headless --path . --export-release "Windows Desktop"
           ls -la build/windows
           test -f build/windows/OpenRail.exe
           test -f build/windows/openrail_gdext.dll
