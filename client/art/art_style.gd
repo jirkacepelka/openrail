@@ -13,7 +13,9 @@ extends Node3D
 ##   shader, keeping their colour and albedo texture, including meshes added
 ##   later and imported glTF models; a material named M_Something is replaced
 ##   by res://art/materials/M_Something.tres when that file exists,
-## - optionally lay a painted ground plane under the world.
+## - optionally lay a painted ground plane under the world,
+## - plant woods and lay out fields around towns (vegetation.gd) when the
+##   Session holds a world, and pass that layout to every ground material.
 ## Gameplay code can also ask for materials directly with ArtStyle.paint().
 ## See docs/art-style.md.
 
@@ -24,6 +26,7 @@ const PAINTERLY_SHADER := preload("res://art/shaders/painterly.gdshader")
 const POST_SHADER_PATH := "res://art/shaders/post_painterly.gdshader"
 const POST_SHADER_LITE_PATH := "res://art/shaders/post_painterly_lite.gdshader"
 const GROUND_SHADER := preload("res://art/shaders/painterly_ground.gdshader")
+const Vegetation := preload("res://art/vegetation.gd")
 
 ## Named colours of the palette, for gameplay code and models.
 const PALETTE := {
@@ -44,8 +47,12 @@ const PALETTE := {
 @export var repaint_standard_materials := true
 @export var post_process := true
 @export var add_ground := true
-@export var ground_size := 20000.0
+@export var ground_size := 80000.0
 @export var ground_height := -0.5
+@export var add_vegetation := true
+## Cameras see at least this far, so the land runs out to the horizon and the
+## depth fog (not the far plane) decides where it fades.
+@export var min_camera_far := 40000.0
 
 const MATERIALS_DIR := "res://art/materials/"
 
@@ -57,6 +64,10 @@ var _converted := {}
 @onready var _rim_light: DirectionalLight3D = $RimLight
 
 var _post_quad: MeshInstance3D
+var _vegetation: Node3D
+var _veg_mask: Texture2D
+var _veg_rect := Vector4()
+var _ground_materials: Array[ShaderMaterial] = []
 
 
 ## The post-process shader that works on the current renderer.
@@ -89,14 +100,20 @@ func _ready() -> void:
 		get_tree().node_added.connect(_on_node_added)
 	if post_process:
 		_attach_post_process.call_deferred()
+	if add_vegetation:
+		# Deferred: the game scene creates its world after its children are ready.
+		_start_vegetation.call_deferred()
 
 
 func _process(_delta: float) -> void:
+	var cam := get_viewport().get_camera_3d()
+	if cam == null:
+		return
+	if cam.far < min_camera_far:
+		cam.far = min_camera_far
 	# Keep the post-process on whichever camera is active.
-	if post_process and _post_quad != null:
-		var cam := get_viewport().get_camera_3d()
-		if cam != null and _post_quad.get_parent() != cam:
-			_post_quad.reparent(cam, false)
+	if post_process and _post_quad != null and _post_quad.get_parent() != cam:
+		_post_quad.reparent(cam, false)
 
 
 func _remove_competing_lighting(scene_root: Node) -> void:
@@ -117,9 +134,44 @@ func _create_ground() -> void:
 	ground.name = "PaintedGround"
 	ground.mesh = plane
 	ground.material_override = mat
+	_track_ground_material(mat)
 	ground.position = Vector3(0, ground_height, 0)
 	ground.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(ground)
+
+
+func _start_vegetation() -> void:
+	var session := get_node_or_null("/root/Session")
+	if session == null or session.get("world") == null:
+		return # no world (style preview, tools): nothing to plant around
+	_vegetation = Vegetation.new()
+	_vegetation.name = "Vegetation"
+	add_child(_vegetation)
+	_vegetation.mask_ready.connect(_on_vegetation_mask)
+	_vegetation.build(session.world, int(session.get("seed_value")), _painted)
+
+
+func _on_vegetation_mask(texture: Texture2D, rect: Vector4) -> void:
+	_veg_mask = texture
+	_veg_rect = rect
+	for mat in _ground_materials:
+		_apply_mask(mat)
+
+
+## Ground materials (ours and terrain chunks using the ground shader) get the
+## vegetation layout, so fields and forest floor sit under the trees.
+func _track_ground_material(mat: ShaderMaterial) -> void:
+	if not _ground_materials.has(mat):
+		_ground_materials.append(mat)
+	_apply_mask(mat)
+
+
+func _apply_mask(mat: ShaderMaterial) -> void:
+	if _veg_mask == null:
+		return
+	mat.set_shader_parameter("veg_mask", _veg_mask)
+	mat.set_shader_parameter("veg_mask_rect", _veg_rect)
+	mat.set_shader_parameter("use_veg_mask", true)
 
 
 func _attach_post_process() -> void:
@@ -153,6 +205,12 @@ func _on_node_added(node: Node) -> void:
 
 
 func _repaint(mesh: MeshInstance3D) -> void:
+	var ground := mesh.material_override as ShaderMaterial
+	if ground == null and mesh.mesh != null and mesh.mesh.get_surface_count() > 0:
+		ground = mesh.mesh.surface_get_material(0) as ShaderMaterial
+	if ground != null and ground.shader == GROUND_SHADER:
+		_track_ground_material(ground)
+		return
 	if mesh.material_override != null:
 		var replaced := _painted(mesh.material_override)
 		if replaced != null:

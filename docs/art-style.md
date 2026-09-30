@@ -12,6 +12,10 @@ motivy seriálu: domy, vozidla a krajina mají vlastní, realističtější desi
 
 *`client/art/style_preview.tscn`, rendered with `client/tools/screenshot.gd`.*
 
+![Landscape in the game](img/landscape.png)
+
+*The game world (`main.tscn`): fields around towns, woods, depth fog.*
+
 We take inspiration only from Arcane's *rendering technique* (painted
 textures, graphic lighting, colour-rich shadows, coloured ink lines). Its
 architecture, setting, technology and motifs are out of scope: OpenRail's
@@ -73,10 +77,22 @@ Everything lives in `client/art/`:
   brush-broken terminator, warm terminator colour, world-space brush strokes
   (no UVs needed), rim light, a small painted highlight. With
   `use_uv_texture` it multiplies a hand-painted albedo texture.
-- `shaders/painterly_ground.gdshader`: terrain. Large colour washes plus
-  brush strokes that calm down with distance.
+- `shaders/painterly_ground.gdshader`: terrain. Soft, domain-warped washes
+  of grass, dirt and then rock on steeper slopes, drier grass up high, a
+  patchwork of fields with furrows and hedges, and a painted canopy under
+  woods. Fine brush strokes only close to the camera; detail finer than a
+  pixel fades out so the far ground stays calm. Slope comes from the normal
+  and height from the world position, so it works on the flat plane and on
+  real terrain meshes.
+- `vegetation.gd`: woods and lone trees (MultiMesh per 1 km chunk, full trees
+  up close, cheap blobs beyond `lod_distance`) and farmland around towns. It
+  bakes a forest/farmland mask that ArtStyle passes to every material using
+  the ground shader, so fields and forest floor sit under the trees. Trees
+  under new track are cut down. It uses `assets/nature/tree_*.glb` when those
+  models exist, otherwise built-in stand-ins, and `world/ground.gd`'s
+  `height_at()` when there is terrain.
 - `shaders/painted_sky.gdshader`: sky gradient, painted two-tone clouds,
-  sun glow.
+  sun glow. The horizon colour matches the fog colour.
 - `shaders/post_painterly.gdshader`: full screen. Kuwahara paint filter, ink
   lines from depth and normals, colour grade (saturation, contrast, cool
   shadows / warm highlights), canvas grain, vignette.
@@ -109,6 +125,9 @@ from `openrail-assets` gets a hand-tuned look without touching the model.
 | post | `line_fade_distance` | camera distance where lines disappear |
 | post | `shadow_tint`, `highlight_tint`, `split_tone_strength` | colour grade |
 | Environment | `ambient_light_color` | colour of all shadows |
+| Environment | `fog_depth_begin`, `fog_depth_end`, `fog_depth_curve` | where the land fades into the horizon (depth fog; cameras get `far` of at least `min_camera_far`) |
+| ground | `field_size`, `dirt_slope`, `rock_slope`, `highland_start` | fields, slopes and heights |
+| vegetation | `trees_per_forest_pixel`, `lod_distance`, `visibility_end` | tree density and draw distance |
 | Sun | `light_color`, rotation | time of day |
 
 ## Rules for assets (Blender)
