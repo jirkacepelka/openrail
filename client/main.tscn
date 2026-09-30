@@ -1,5 +1,6 @@
 [gd_scene load_steps=5 format=3]
 
+[ext_resource type="PackedScene" path="res://art/art_style.tscn" id="2_art"]
 [ext_resource type="Script" path="res://main.gd" id="1"]
 
 [sub_resource type="ProceduralSkyMaterial" id="sky_mat"]
@@ -23,3 +24,5 @@ transform = Transform3D(1, 0, 0, 0, 0.7071, 0.7071, 0, -0.7071, 0.7071, 0, 100, 
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="."]
 environment = SubResource("env")
+
+[node name="ArtStyle" parent="." instance=ExtResource("2_art")]
