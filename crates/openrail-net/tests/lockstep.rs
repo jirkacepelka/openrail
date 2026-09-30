@@ -202,8 +202,9 @@ fn random_command(world: &World, me: PlayerId, rng: &mut SimRng) -> Command {
         .map(|(id, _)| id)
         .collect();
     let roll = rng.below(100);
+    // A small area keeps track cheap, so companies can still afford trains.
     let fallback = Command::BuildNode {
-        pos: pos(rng.below(5000) as i32, rng.below(5000) as i32),
+        pos: pos(rng.below(400) as i32, rng.below(400) as i32),
     };
     match roll {
         0..=24 => fallback,
