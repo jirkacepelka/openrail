@@ -1,5 +1,7 @@
 //! Godot 4 GDExtension exposing the OpenRail simulation as `SimWorld`.
 
+mod net;
+
 use godot::prelude::*;
 use openrail_sim::{Command, CommandError, Fixed, NodeId, PlayerId, TrackId, TrainId, Vec2, World};
 
@@ -23,20 +25,36 @@ fn fixed_from_f64(v: f64) -> Fixed {
     Fixed::from_bits((v * 65536.0) as i64)
 }
 
+/// A world the game renders and picks from.
+///
+/// A local world (the default) is simulated here: `step` advances it and
+/// the `build_*` / `spawn_train` / `set_route` methods apply commands as
+/// player 0 right away. A remote view, handed out by `NetClient.world()`,
+/// shows the confirmed world of an online game instead: every query works
+/// the same, but the view is read-only (`step` does nothing, commands are
+/// refused; submit them through `NetClient`) and `balance` is that of the
+/// joined player.
 #[derive(GodotClass)]
 #[class(base=RefCounted)]
 pub struct SimWorld {
     world: World,
+    /// Whose company `balance` shows and who local commands act as.
+    player: PlayerId,
+    /// Read-only view of a `NetClient`'s world.
+    remote: bool,
     last_error: GString,
     error_count: i64,
     base: Base<RefCounted>,
 }
+
 
 #[godot_api]
 impl IRefCounted for SimWorld {
     fn init(base: Base<RefCounted>) -> Self {
         SimWorld {
             world: World::new(0),
+            player: LOCAL_PLAYER,
+            remote: false,
             last_error: GString::new(),
             error_count: 0,
             base,
@@ -45,9 +63,15 @@ impl IRefCounted for SimWorld {
 }
 
 impl SimWorld {
-    /// Apply a command as the local player, remembering the error text.
-    fn apply(&mut self, cmd: &Command) -> Result<(), CommandError> {
-        let result = self.world.apply(LOCAL_PLAYER, cmd);
+    /// Apply a command as `player` to a local world, remembering the error
+    /// text. A remote view refuses every command (submit them through
+    /// `NetClient`) without touching the error record.
+    fn apply(&mut self, cmd: &Command) -> Result<(), ()> {
+        if self.remote {
+            godot_warn!("SimWorld: this is a remote view; submit commands through NetClient");
+            return Err(());
+        }
+        let result = self.world.apply(self.player, cmd);
         self.last_error = match &result {
             Ok(()) => GString::new(),
             Err(e) => {
@@ -55,7 +79,7 @@ impl SimWorld {
                 GString::from(e.to_string().as_str())
             }
         };
-        result
+        result.map_err(|_| ())
     }
 }
 
@@ -64,12 +88,31 @@ impl SimWorld {
     /// Replace the world with a fresh one created from `seed`.
     #[func]
     fn new_world(&mut self, seed: i64) {
+        if self.remote {
+            return;
+        }
         self.world = World::new(seed as u64);
     }
 
     #[func]
     fn step(&mut self) {
+        if self.remote {
+            return; // advanced by NetClient.poll()
+        }
         self.world.step();
+    }
+
+    /// `true` for a read-only view of an online game (see `NetClient`).
+    #[func]
+    fn is_remote(&self) -> bool {
+        self.remote
+    }
+
+    /// The player whose company this world shows: 0 locally, the joined
+    /// player's id in an online game.
+    #[func]
+    fn player_id(&self) -> i64 {
+        i64::from(self.player.0)
     }
 
     #[func]
@@ -252,10 +295,10 @@ impl SimWorld {
         out
     }
 
-    /// The local player's balance in whole currency units.
+    /// The player's (see `player_id`) balance in whole currency units.
     #[func]
     fn balance(&self) -> i64 {
-        self.world.balance(LOCAL_PLAYER)
+        self.world.balance(self.player)
     }
 
     /// Today's in-game date as `YYYY-MM-DD`.

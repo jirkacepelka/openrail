@@ -4,6 +4,7 @@ extends Node
 
 const BuildController := preload("res://gameplay/build_controller.gd")
 const BuildOverlay := preload("res://gameplay/build_overlay.gd")
+const CommandSink := preload("res://gameplay/command_sink.gd")
 const BuildToolbar := preload("res://ui/build_toolbar.gd")
 const LinePanel := preload("res://ui/line_panel.gd")
 const NodeTooltip := preload("res://ui/node_tooltip.gd")
@@ -16,7 +17,9 @@ signal trains_changed
 var controller: BuildController
 
 
-func setup(sim: SimWorld, camera: Camera3D) -> void:
+## `sink` defaults to applying commands to `sim` locally. For an online
+## game pass a RemoteSession's `world` as `sim` and its `sink`.
+func setup(sim: SimWorld, camera: Camera3D, sink: CommandSink = null) -> void:
 	var overlay := BuildOverlay.new()
 	overlay.name = "BuildOverlay"
 	add_child(overlay)
@@ -24,7 +27,7 @@ func setup(sim: SimWorld, camera: Camera3D) -> void:
 	controller = BuildController.new()
 	controller.name = "BuildController"
 	add_child(controller)
-	controller.setup(sim, camera, overlay)
+	controller.setup(sim, camera, overlay, sink)
 	controller.network_changed.connect(network_changed.emit)
 	controller.trains_changed.connect(trains_changed.emit)
 
