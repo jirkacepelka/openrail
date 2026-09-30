@@ -7,7 +7,8 @@ extends Node3D
 ##   Filmic tonemap, glow, fog) and a warm sun; other WorldEnvironment and
 ##   DirectionalLight3D nodes in the scene are removed,
 ## - add the full-screen post-process (paint filter, ink lines, colour grade)
-##   to the active camera,
+##   to the active camera; on the Mobile and Compatibility renderers only a
+##   lighter colour-grade pass,
 ## - repaint meshes that use a plain StandardMaterial3D with the painterly
 ##   shader, keeping their colour and albedo texture, including meshes added
 ##   later and imported glTF models; a material named M_Something is replaced
@@ -17,7 +18,11 @@ extends Node3D
 ## See docs/art-style.md.
 
 const PAINTERLY_SHADER := preload("res://art/shaders/painterly.gdshader")
-const POST_SHADER := preload("res://art/shaders/post_painterly.gdshader")
+# Post-process shaders are loaded on demand: the full one uses the
+# normal-roughness buffer, which only exists on Forward+, and fails to compile
+# on the Mobile and Compatibility (OpenGL) renderers.
+const POST_SHADER_PATH := "res://art/shaders/post_painterly.gdshader"
+const POST_SHADER_LITE_PATH := "res://art/shaders/post_painterly_lite.gdshader"
 const GROUND_SHADER := preload("res://art/shaders/painterly_ground.gdshader")
 
 ## Named colours of the palette, for gameplay code and models.
@@ -52,6 +57,13 @@ var _converted := {}
 @onready var _rim_light: DirectionalLight3D = $RimLight
 
 var _post_quad: MeshInstance3D
+
+
+## The post-process shader that works on the current renderer.
+static func post_shader_path() -> String:
+	if RenderingServer.get_current_rendering_method() == "forward_plus":
+		return POST_SHADER_PATH
+	return POST_SHADER_LITE_PATH
 
 
 ## Painterly material for a flat colour. Materials are shared per colour.
@@ -118,7 +130,7 @@ func _attach_post_process() -> void:
 	var quad := QuadMesh.new()
 	quad.size = Vector2(2, 2)
 	var mat := ShaderMaterial.new()
-	mat.shader = POST_SHADER
+	mat.shader = load(post_shader_path())
 	_post_quad = MeshInstance3D.new()
 	_post_quad.name = "PainterlyPostProcess"
 	_post_quad.mesh = quad
