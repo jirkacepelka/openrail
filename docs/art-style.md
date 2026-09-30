@@ -149,6 +149,10 @@ from `openrail-assets` gets a hand-tuned look without touching the model.
   the rail.
 - **Foliage:** alpha-tested cards (alpha clip in Blender) are fine; they keep
   their alpha threshold after conversion.
+- **Trees** (`assets/nature/tree_*.glb`) are planted by the hundred thousand,
+  so keep them under 1500 triangles (ideally 300 to 800); heavier ones are
+  skipped for the built-in stand-in with a warning. Origin at the foot of the
+  trunk; the client scales them to about 12 m.
 
 ## Previewing without the editor
 

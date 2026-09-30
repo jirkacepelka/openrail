@@ -18,6 +18,9 @@ const TREE_SCENES := {
 	"conifer": "res://assets/nature/tree_conifer.glb",
 }
 const GROUND_SCRIPT := "res://world/ground.gd"
+## Imported trees above this many triangles are too heavy to plant by the
+## hundred thousand; the stand-in is used instead (with a warning).
+const MAX_TREE_TRIANGLES := 1500
 const TOWNS_LAYOUT_SCRIPT := "res://world/towns_layout.gd"
 const BROADLEAF_GREENS := [Color(0.34, 0.52, 0.24), Color(0.46, 0.54, 0.22), Color(0.28, 0.46, 0.30)]
 const CONIFER_GREENS := [Color(0.20, 0.36, 0.27), Color(0.24, 0.40, 0.26), Color(0.18, 0.32, 0.28)]
@@ -380,6 +383,15 @@ func _mesh_from_scene(scene: PackedScene) -> Mesh:
 	if not found.is_empty():
 		var mi := found[0] as MeshInstance3D
 		var source := mi.mesh
+		var triangles := 0
+		for s in source.get_surface_count():
+			var arrays := source.surface_get_arrays(s)
+			var indices: PackedInt32Array = arrays[Mesh.ARRAY_INDEX] if arrays[Mesh.ARRAY_INDEX] != null else PackedInt32Array()
+			triangles += (indices.size() if not indices.is_empty() else (arrays[Mesh.ARRAY_VERTEX] as PackedVector3Array).size()) / 3
+		if triangles > MAX_TREE_TRIANGLES:
+			push_warning("Vegetation: %s has %d triangles (max %d), using the stand-in tree" % [scene.resource_path, triangles, MAX_TREE_TRIANGLES])
+			root.free()
+			return null
 		var height := maxf(source.get_aabb().size.y, 0.01)
 		var scale := 12.0 / height
 		var st_mesh := ArrayMesh.new()
