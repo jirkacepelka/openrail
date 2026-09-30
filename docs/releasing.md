@@ -26,6 +26,10 @@ Each archive holds the game, the GDExtension library (must stay next to the
 executable), `openrail-server`, `server.example.toml`, `LICENSE` and a
 bilingual `README.txt` (source: `tools/release-readme.txt`).
 
+If pushing a tag is not possible (for example from a tool that may only push
+branches), run the Release workflow manually on `main` with "publish" ticked:
+it tags the commit `v<Cargo version>` and publishes the same pre-release.
+
 ## Without a tag
 
 - Run the workflow manually (Actions > Release > Run workflow): both archives
