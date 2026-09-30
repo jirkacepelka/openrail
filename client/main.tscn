@@ -16,7 +16,7 @@ sky = SubResource("sky")
 script = ExtResource("1")
 
 [node name="Camera3D" type="Camera3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 0.7071, 0.7071, 0, -0.7071, 0.7071, 1000, 1500, 1500)
+transform = Transform3D(1, 0, 0, 0, 0.7071, 0.7071, 0, -0.7071, 0.7071, 1500, 2500, 3500)
 far = 10000.0
 
 [node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]

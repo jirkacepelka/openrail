@@ -3,6 +3,10 @@
 use godot::prelude::*;
 use openrail_sim::{Command, Fixed, NodeId, PlayerId, TrackId, TrainId, Vec2, World};
 
+fn vector2(p: Vec2) -> Vector2 {
+    Vector2::new(p.x.to_f64_lossy() as f32, p.y.to_f64_lossy() as f32)
+}
+
 struct OpenRailExtension;
 
 #[gdextension]
@@ -115,6 +119,51 @@ impl SimWorld {
         }
     }
 
+    /// Turn a node into a station. Returns `false` if the command was rejected.
+    #[func]
+    fn build_station(&mut self, node: i64) -> bool {
+        let Ok(node) = u32::try_from(node) else {
+            return false;
+        };
+        let cmd = Command::BuildStation { node: NodeId(node) };
+        self.world.apply(LOCAL_PLAYER, &cmd).is_ok()
+    }
+
+    /// Send a train around the given station node ids in a loop. Returns
+    /// `false` if the command was rejected.
+    #[func]
+    fn set_route(&mut self, train: i64, stops: PackedInt64Array) -> bool {
+        let Ok(train) = u32::try_from(train) else {
+            return false;
+        };
+        let Ok(stops) = stops
+            .as_slice()
+            .iter()
+            .map(|&n| u32::try_from(n).map(NodeId))
+            .collect::<Result<Vec<_>, _>>()
+        else {
+            return false;
+        };
+        let cmd = Command::SetRoute {
+            train: TrainId(train),
+            stops,
+        };
+        self.world.apply(LOCAL_PLAYER, &cmd).is_ok()
+    }
+
+    /// Track end points in metres, two entries per track (rendering only).
+    #[func]
+    fn track_segments(&self) -> PackedVector2Array {
+        let pos: std::collections::BTreeMap<NodeId, Vec2> =
+            self.world.nodes().map(|(id, n)| (id, n.pos)).collect();
+        let mut out = PackedVector2Array::new();
+        for (_, t) in self.world.tracks() {
+            out.push(vector2(pos[&t.a]));
+            out.push(vector2(pos[&t.b]));
+        }
+        out
+    }
+
     /// Current train positions in metres (rendering only, lossy).
     #[func]
     fn train_positions(&self) -> PackedVector2Array {
@@ -122,10 +171,7 @@ impl SimWorld {
         let ids: Vec<TrainId> = self.world.trains().map(|(id, _)| id).collect();
         for id in ids {
             if let Some(p) = self.world.train_position(id) {
-                out.push(godot::builtin::Vector2::new(
-                    p.x.to_f64_lossy() as f32,
-                    p.y.to_f64_lossy() as f32,
-                ));
+                out.push(vector2(p));
             }
         }
         out
