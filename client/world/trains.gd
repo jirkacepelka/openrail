@@ -35,6 +35,7 @@ const COUPLING_GAP := 0.25 ## Between the buffers of neighbouring cars (m).
 const CHASE_RATE := 8.0 ## How fast the drawn train catches up with the sim (1/s).
 const MAX_LAG := 60.0 ## Beyond this lag the drawn train jumps to the sim.
 const HISTORY := 12 ## Tracks remembered per train to trail the cars along.
+const FAR_UPDATE := 0.25 ## Seconds between moves of trains too far to draw.
 
 
 ## One mesh of a vehicle model, drawn for all cars through one MultiMesh.
@@ -120,7 +121,7 @@ func update(delta: float) -> void:
 			continue
 		seen[id] = true
 		var s := _observe(id, t, delta)
-		_place(s, cam)
+		_place(s, cam, delta)
 	for id: int in _state.keys():
 		if not seen.has(id):
 			(_state[id]["node"] as Node).queue_free()
@@ -178,6 +179,8 @@ func _observe(id: int, t: Dictionary, delta: float) -> Dictionary:
 		s["lag"] = 0.0
 	else:
 		s["lag"] = float(s["lag"]) * exp(-CHASE_RATE * delta)
+		if float(s["lag"]) < 0.005:
+			s["lag"] = 0.0
 	s["track"] = track
 	s["fwd"] = fwd
 	s["pos"] = pos
@@ -207,9 +210,23 @@ func _new_train(id: int, track: int, fwd: bool, pos: Vector2) -> Dictionary:
 
 
 ## Lays the cars of one train along the rails and adds them to the draw lists.
-func _place(s: Dictionary, cam: Camera3D) -> void:
+func _place(s: Dictionary, cam: Camera3D, delta: float) -> void:
 	var track: int = s["track"]
 	var fwd: bool = s["fwd"]
+	var at2: Vector2 = s["pos"]
+	var far := cam != null and Vector2(cam.global_position.x, cam.global_position.z).distance_to(at2) > draw_distance + 100.0
+	# Standing trains keep their cars; far ones (not drawn) move a few
+	# times a second, enough for their labels.
+	var key := [track, fwd, at2, s["lag"], minf(s["since"], 1e9), (s["history"] as Array).size()]
+	s["far_time"] = float(s.get("far_time", 0.0)) + delta
+	if s.has("xfs") and (key == s["key"] or (far and float(s["far_time"]) < FAR_UPDATE)):
+		if not far:
+			var xfs: Array = s["xfs"]
+			for i in xfs.size():
+				_draw(loco if i == 0 else wagon, xfs[i], s["odo"])
+		return
+	s["key"] = key
+	s["far_time"] = 0.0
 	var d := paths.distance_on(track, s["pos"])
 	# Tracks to prefer at junctions, most recent last.
 	var history: Array = (s["history"] as Array) + [track]
@@ -242,6 +259,8 @@ func _place(s: Dictionary, cam: Camera3D) -> void:
 	s["head"] = front_point
 	s["odo"] = odo
 	var near := cam == null or cam.global_position.distance_to(front_point) < draw_distance
+	var xfs: Array[Transform3D] = []
+	s["xfs"] = xfs
 	var coupler := front_point # the buffer the next car couples to
 	var reach := 0.0 # its distance ahead of the next car's front buffer
 	for i in cars.size():
@@ -260,6 +279,7 @@ func _place(s: Dictionary, cam: Camera3D) -> void:
 		# Origin: the front axle sits at local z = axle_front.
 		var xf := Transform3D(Basis.looking_at(dir, Vector3.UP), pf + dir * model.axle_front)
 		(cars[i] as Node3D).transform = xf
+		xfs.append(xf)
 		if near:
 			_draw(model, xf, odo)
 		# On to the rear buffer, where the next car couples.
