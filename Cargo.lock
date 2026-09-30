@@ -669,6 +669,7 @@ name = "openrail-gdext"
 version = "0.0.1"
 dependencies = [
  "godot",
+ "openrail-net",
  "openrail-sim",
 ]
 
