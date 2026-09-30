@@ -109,9 +109,10 @@ func _run() -> void:
 	_check(sim.balance() < balance0, "building was paid (%d -> %d)" % [balance0, sim.balance()])
 	var labels: Node = game.get("labels")
 	labels.call("refresh")
-	var train_nodes: Dictionary = labels.get("_trains")
-	_check(train_nodes.has(int(train["id"])) and train_nodes.size() == 1,
-			"the train has its marker, keyed by id")
+	var train_labels: Dictionary = labels.get("_train_labels")
+	var cars: Array = labels.get("trains").call("cars_of", int(train["id"]))
+	_check(train_labels.has(int(train["id"])) and train_labels.size() == 1 and cars.size() >= 3,
+			"the train has its label and %d cars, keyed by id" % cars.size())
 
 	# Leave through the HUD path back to the menu.
 	session.leave_to_menu()

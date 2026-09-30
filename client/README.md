@@ -79,10 +79,12 @@ tools and tests (it starts a throw-away local game if no session exists).
 - `ui/`: toolbar, train/line panel, node tooltip. Built in code, no scenes.
 - `game/`: session autoload, world generation, settings, strings, the game
   scene (`game.gd`, redraws the network when `gameplay.network_changed`
-  fires) and `world_labels.gd` (town, station and train markers and labels).
+  fires) and `world_labels.gd` (towns, stations and trains with their
+  labels).
 - `world/`: scenery from the sim state: terrain (`terrain.gd`, heights from
   `SimWorld.terrain_height` through `ground.gd`), track meshes
-  (`track_mesh.gd`) and towns. See `world/README.md`, including the terrain
+  (`track_mesh.gd`), towns, trains (`trains.gd`) and stations
+  (`stations.gd`), the last two from the models in `assets/`. See `world/README.md`, including the terrain
   vertex data for shaders.
 - `ui/` also has the theme (`ui_theme.gd`), main menu, HUD bar and toast.
 
@@ -114,7 +116,7 @@ failure.
 
 | Test | Checks | Prints |
 | --- | --- | --- |
-| `tests/smoke_build.gd` | Build tools through a whole line; the train reaches the far station. | `SMOKE OK` |
+| `tests/smoke_build.gd` | Build tools through a whole line; the train reaches the far station. On a bent, hilly line the train is drawn as a locomotive and wagons whose wheels stay on the rails, keep their spacing and pitch on slopes; the station model stands at the station. | `SMOKE OK` |
 | `tests/game_loop.gd` | A local game from `Session` with a fixed seed: towns, money, speed control, a line between two towns carries passengers, settings persist. | `GAME LOOP OK` |
 | `tests/terrain.gd` | Terrain heights are deterministic and match the terrain and track meshes, picking hits hills, towns sit on flat dry ground, the game starts at the first town above the ground. | `TERRAIN OK` |
 | `tests/smoke_net.gd` | `RemoteSession` against a local server: pinned join, the build tools through the remote sink, the train moves, the view is read-only, its terrain matches a local world with the server's seed. | `NET SMOKE OK` |

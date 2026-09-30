@@ -1,0 +1,14 @@
+# Textures Godot extracts from the .glb files when importing them
+# (`godot --headless --import` recreates them; the .glb is the source).
+/vehicles/locomotive_steam_*.png
+/vehicles/locomotive_steam_*.png.import
+/vehicles/wagon_covered_*.png
+/vehicles/wagon_covered_*.png.import
+/buildings/station_small_*.png
+/buildings/station_small_*.png.import
+/nature/terrain_sample_*.png
+/nature/terrain_sample_*.png.import
+/nature/tree_conifer_*.png
+/nature/tree_conifer_*.png.import
+/nature/tree_deciduous_*.png
+/nature/tree_deciduous_*.png.import

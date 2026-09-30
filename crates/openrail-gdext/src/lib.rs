@@ -277,8 +277,10 @@ impl SimWorld {
         out
     }
 
-    /// All trains as `{id, track, stops, x, y}` where `stops` is a
-    /// `PackedInt64Array` of station node ids (empty in shuttle mode).
+    /// All trains as `{id, track, forward, stops, x, y}` where `forward` is
+    /// `true` while the train heads from the track's node `a` to `b` and
+    /// `stops` is a `PackedInt64Array` of station node ids (empty in shuttle
+    /// mode).
     #[func]
     fn trains(&self) -> Array<VarDictionary> {
         let mut out = Array::new();
@@ -292,6 +294,7 @@ impl SimWorld {
             out.push(&vdict! {
                 "id" => i64::from(id.0),
                 "track" => i64::from(t.track.0),
+                "forward" => t.forward,
                 "stops" => &stops,
                 "x" => p.x,
                 "y" => p.y,

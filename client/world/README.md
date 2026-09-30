@@ -63,6 +63,62 @@ simulation still measures tracks in 2D. Materials `M_Ballast`, `M_Rail`,
 `StandardMaterial3D`s that `ArtStyle` repaints; save
 `client/art/materials/M_<name>.tres` to restyle one.
 
+## Trains (`trains.gd`, `rail_paths.gd`)
+
+`game/world_labels.gd` creates a `Trains` node. Every sim train is drawn
+as the steam locomotive (`assets/vehicles/locomotive_steam.glb`) and
+covered wagons (`wagon_covered.glb`), one wagon per 40 passengers of
+`train_capacity()` (2 to 6; 3 today), at the models' real size (10.2 m
+and 8.3 m over buffers, standard gauge).
+
+- `RailPaths` holds the network as rail-top paths: every straight track
+  with its rail height sampled like `track_mesh.gd` draws it, so wheels sit
+  exactly on the rails, over hills and water crossings too. `advance()`
+  walks along the rails across nodes.
+- The sim point of a train (`trains()` gives `track`, `forward`, `x`, `y`)
+  is the front of the train. The cars trail it along the tracks the train
+  came from (straightest continuation otherwise). Each car stands on its
+  front and rear axle, both on the rails, so it turns and pitches with
+  them; wheels turn with the distance travelled, the side rods circle.
+- The drawn train chases the sim point (smooth between ticks). When a
+  train turns round, its locomotive runs round to the other end and the
+  train eases out of its old place, so no car stands past a buffer stop.
+- Rendering is instanced: one `MultiMeshInstance3D` per model part for all
+  trains (`Loco_Body`, `Wagon_Wheelset_0`, ...), refilled every frame for
+  cars within `draw_distance` (4.5 km) of the camera; standing trains keep
+  their places, far ones move 4 times a second. The parts use the models'
+  `M_<Asset>_<Mesh>` materials as `ArtStyle` painted them.
+- Each train has a node `Train_<id>` with a `Node3D` per car (`Loco`,
+  `Wagon1`, ...) at the car's origin (rail top, centre, facing -Z):
+  `cars_of(id)`, `train_position(id)` (the middle, for labels).
+
+Without the model files (a clone without Git LFS) coloured boxes stand in.
+
+## Stations (`stations.gd`)
+
+A `Stations` node puts `assets/buildings/station_small.glb` at every
+station node, its track axis along the track through the node (the
+straightest pair of tracks there, or the only one at a terminus) and the
+platform beside it. The platform is lengthened with copies of the model's
+`Platform` mesh so a whole train fits: centred on a through station (trains
+stop with their front at the node), running into the line from a terminus,
+where the building stands at the buffer stop end. Every platform piece sits
+on the rail top at its place, following the grade, on a stone plinth
+(`M_Station_Small_Plinth`) reaching down to the ground. The platform goes
+on the side without other tracks, else the side facing the nearest town.
+Stations are rebuilt when the tracks at their node change. The waiting
+passengers label floats above (world_labels).
+
+Checking: `tests/smoke_build.gd` runs a train round a bend over hills and
+checks every axle against the rails. `tools/train_shots.gd` builds a line
+between two towns and takes close-ups of the train on the bend and at the
+station:
+
+```
+xvfb-run -a -s "-screen 0 1920x1080x24" godot --resolution 1920x1080 \
+    --path client --script res://tools/train_shots.gd -- --out /tmp/train
+```
+
 ## Towns (`towns*.gd`)
 
 `game/world_labels.gd` creates a `Towns` node (`towns.gd`) and calls
