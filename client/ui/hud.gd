@@ -97,7 +97,7 @@ func _refresh() -> void:
 	_date.text = w.date_string()
 	var remote: bool = session.is_remote()
 	for speed: int in _speed_buttons:
-		(_speed_buttons[speed] as Button).disabled = remote
+		(_speed_buttons[speed] as Button).visible = not remote # the server owns the clock
 	if remote:
 		_date.tooltip_text = Loc.t("hud.remote_speed")
 
